@@ -64,6 +64,13 @@ class TrajectoryRepository(Protocol):
 
     def get_trajectory(self, video_id: str) -> Trajectory: ...
 
+    def get_snapshots(self, video_id: str) -> list[Snapshot]:
+        """Histórico bruto (com likes/comments), ordenado no tempo —
+        `get_trajectory` só devolve views (o que o Motor A precisa); o Motor B
+        usa isto pra engajamento inicial. Lista vazia se o vídeo não existe
+        (diferente de `get_trajectory`, que levanta `KeyError`)."""
+        ...
+
     def video_ids(self) -> list[str]: ...
 
 

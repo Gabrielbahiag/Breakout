@@ -90,6 +90,23 @@ class SqlTrajectoryRepository:
         views = np.array([int(r[1]) for r in rows], dtype=np.int64)
         return Trajectory(video_id, t, views, self._load_metadata(video_id))
 
+    def get_snapshots(self, video_id: str) -> list[Snapshot]:
+        rows = self._conn.execute(
+            "SELECT video_id, at, views, likes, comments FROM snapshots "
+            "WHERE video_id = ? ORDER BY at",
+            (video_id,),
+        ).fetchall()
+        return [
+            Snapshot(
+                video_id=r[0],
+                at=datetime.fromisoformat(r[1]),
+                views=int(r[2]),
+                likes=int(r[3] or 0),
+                comments=int(r[4] or 0),
+            )
+            for r in rows
+        ]
+
     def video_ids(self) -> list[str]:
         rows = self._conn.execute("SELECT DISTINCT video_id FROM snapshots").fetchall()
         return [r[0] for r in rows]

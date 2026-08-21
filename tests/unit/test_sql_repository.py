@@ -39,8 +39,8 @@ def any_repo(request):
     return request.param()
 
 
-def _snap(vid, hours, views):
-    return Snapshot(video_id=vid, at=T0 + timedelta(hours=hours), views=views)
+def _snap(vid, hours, views, likes=0, comments=0):
+    return Snapshot(video_id=vid, at=T0 + timedelta(hours=hours), views=views, likes=likes, comments=comments)
 
 
 def test_honra_o_contrato(any_repo):
@@ -73,3 +73,17 @@ def test_video_ids(any_repo):
 def test_get_inexistente_levanta(any_repo):
     with pytest.raises(KeyError):
         any_repo.get_trajectory("nao_existe")
+
+
+def test_get_snapshots_ordena_e_preserva_likes_comments(any_repo):
+    any_repo.save_snapshot(_snap("v", 1, 200, likes=20, comments=2))
+    any_repo.save_snapshot(_snap("v", 0, 100, likes=10, comments=1))
+    snaps = any_repo.get_snapshots("v")
+    assert [s.views for s in snaps] == [100, 200]
+    assert [s.likes for s in snaps] == [10, 20]
+    assert [s.comments for s in snaps] == [1, 2]
+    assert snaps[0].at < snaps[1].at
+
+
+def test_get_snapshots_inexistente_devolve_lista_vazia(any_repo):
+    assert any_repo.get_snapshots("nao_existe") == []

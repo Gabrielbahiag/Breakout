@@ -40,5 +40,9 @@ class InMemoryTrajectoryRepository:
         views = np.array([s.views for s in snaps], dtype=np.int64)
         return Trajectory(video_id, t, views, self._meta.get(video_id))
 
+    def get_snapshots(self, video_id: str) -> list[Snapshot]:
+        by_time = self._snaps.get(video_id, {})
+        return [by_time[k] for k in sorted(by_time)]
+
     def video_ids(self) -> list[str]:
         return list(self._snaps)

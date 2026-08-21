@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..types import Trajectory
+from ..types import Snapshot, Trajectory
 
 
 def window_before(trajectory: Trajectory, cutoff_hours: float) -> tuple[np.ndarray, np.ndarray]:
@@ -22,3 +22,18 @@ def window_before(trajectory: Trajectory, cutoff_hours: float) -> tuple[np.ndarr
     v = np.asarray(trajectory.views)
     mask = t <= cutoff_hours
     return t[mask], v[mask]
+
+
+def snapshots_before(snapshots: list[Snapshot], cutoff_hours: float) -> list[Snapshot]:
+    """Análogo a `window_before`, mas sobre o histórico BRUTO (`get_snapshots`,
+    com likes/comments) em vez de `Trajectory` — é por aqui que `features.py`
+    extrai engajamento inicial sem vazar o futuro.
+
+    `cutoff_hours` é relativo ao PRIMEIRO snapshot da lista (mesma convenção
+    de `t_hours` em `Trajectory`/`get_trajectory`), ordenados no tempo.
+    """
+    if not snapshots:
+        return []
+    ordered = sorted(snapshots, key=lambda s: s.at)
+    t0 = ordered[0].at
+    return [s for s in ordered if (s.at - t0).total_seconds() / 3600.0 <= cutoff_hours]

@@ -137,8 +137,10 @@ Estes princípios têm precedência sobre conveniência. Não os viole ao gerar 
 5. **Contratos são as fronteiras.** Coleta, storage, motores e dashboard conversam
    pelos Protocols (Seção 7), não por implementações concretas.
 6. **Anti-vazamento (data leakage).** Toda feature do Motor B só pode enxergar
-   pontos ATÉ o instante de rotulagem, sempre via `engine_b/windows.py::window_before`.
-   Há um teste-guarda que trava isso.
+   pontos ATÉ o instante de rotulagem, sempre via `engine_b/windows.py`
+   (`window_before` para `Trajectory`, `snapshots_before` para o histórico bruto
+   com likes/comments — mesma barreira, duas formas de dado). Há um teste-guarda
+   que trava isso (`test_no_leakage.py`, e `test_features.py` testa o USO real).
 7. **Cota: descobrir é caro, amostrar é barato.** `search.list` = 100 unidades
    (~100 buscas/dia); `videos.list` = 1 unidade por lote de 50 IDs. Ser parcimonioso
    na descoberta, generoso na amostragem.
@@ -270,7 +272,9 @@ breakout/
 │   │   ├── metrics.py       # lead_time_hours, crossing_hours
 │   │   └── benchmark.py     # ✅ bake-off: precisão/recall, earliness, sensitivity_curve
 │   ├── engine_b/
-│   │   └── windows.py       # window_before: barreira anti-vazamento
+│   │   ├── windows.py       # window_before / snapshots_before: barreira anti-vazamento
+│   │   ├── label.py         # ✅ label_by_threshold / label_by_percentile (viés de seleção)
+│   │   └── features.py      # ✅ extract_features: estáticas (upload) + dinâmicas (via snapshots_before)
 │   └── synth/
 │       └── trajectories.py  # gerador sintético com verdade-conhecida (5 arquétipos)
 └── tests/
@@ -375,8 +379,11 @@ Windows nem builda sem toolchain Rust+MSVC). Na máquina de trabalho, instale s�
   ✅ PELT offline (`ruptures`). ✅ curva earliness×acurácia (`sensitivity_curve`
   em `benchmark.py`). Motor A fechado — só falta BOCPD/PELT rodarem sobre
   dados REAIS quando a Fase 1 acumular trajetórias longas o suficiente.
-- **Fase 4 — Elementos: metadados (Motor B).** ⬜ `label.py` (definição de viral +
-  amostragem sem viés) · `features.py` · `model.py` · `explain.py` (SHAP).
+- **Fase 4 — Elementos: metadados (Motor B).** ✅ `label.py` (limiar +
+  percentil, com defesa contra viés de seleção). ✅ `features.py` (estáticas +
+  engajamento inicial via `snapshots_before`; exigiu estender o contrato
+  `TrajectoryRepository` com `get_snapshots()`, já que `get_trajectory` só
+  carrega views). ⬜ `model.py` · `explain.py` (SHAP).
 - **Fase 5 — Elementos: multimodal (Motor B).** ⬜ thumbnail (CV) + transcrição.
 - **Fase 6 — Unificação + dashboard.** ⬜ curva + ponto de decolagem + fatores;
   README com o demo (lead time visível) e as métricas honestas.
