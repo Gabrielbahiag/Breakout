@@ -30,31 +30,34 @@ teto honesto do problema.
 
 ## 2. Estado atual (o que já existe)
 
-O esqueleto **já está construído e roda verde**: `pytest` → 69 testes passando,
-**zero `xfail`** (o autômato de Kleinberg foi o último a cair). **Fase 0 fechada
-de verdade**: repo público (`Gabrielbahiag/Breakout`), Turso em produção,
-YouTube API key configurada, coletor rodando no cron do GitHub Actions e já
-validado com dados reais (`discover` semeou vídeos, `collect` gravou snapshots
-reais no Turso). **Motor A completo até a Fase 3** (baseline + CUSUM + Kleinberg
-+ bake-off). O que está pronto vs. pendente:
+O esqueleto **já está construído e roda verde**: `pytest` → 84 testes passando,
+**zero `xfail`**. **Fase 0 fechada de verdade**: repo público
+(`Gabrielbahiag/Breakout`), Turso em produção, YouTube API key configurada,
+coletor rodando no cron do GitHub Actions e já validado com dados reais
+(`discover` semeou vídeos, `collect` gravou snapshots reais no Turso). **Motor A
+completo, incluindo as evoluções da Fase 3** (baseline + CUSUM + Kleinberg +
+BOCPD + PELT + bake-off com curva de sensibilidade). O que está pronto vs.
+pendente:
 
 **Pronto e testado:** contratos (Protocols), tipos do domínio, gerador de
 trajetórias sintéticas (`synth`), fakes de teste, coletor de snapshots, harness de
-replay, métricas de lead time (`metrics.py`) e bake-off (`benchmark.py`), os três
-detectores do Motor A — `BaselineDetector` (aceleração), `CusumDetector`
-(Page-Hinkley, Fase 2), `KleinbergBurstDetector` (autômato de estados via Viterbi
-incremental, Fase 3) —, janela anti-vazamento, storage SQL atrás do contrato
-(`SqlTrajectoryRepository`, com **Turso como banco atual em produção** e SQLite
-local como fallback/dev), política de cadência (`policy`), composition root, CLI
-(Typer), settings, adaptador real da YouTube API (filtrado por `videoDuration=
-short`), e os três workflows do GitHub Actions (`ci`, `collect` em cron,
-`discover` de disparo manual — este último existe porque `libsql-experimental`
-não tem wheel para Windows, então nada que precise de `[prod]` roda na máquina de
-trabalho).
+replay, métricas de lead time (`metrics.py`) e bake-off com curva de
+sensibilidade (`benchmark.py`), os detectores do Motor A — `BaselineDetector`
+(aceleração), `CusumDetector` (Page-Hinkley, Fase 2), `KleinbergBurstDetector`
+(autômato de estados via Viterbi incremental, Fase 3), `BocpdDetector`
+(Bayesian Online Change Point Detection, Fase 3 evolução — só confiável em
+regime-troca tipo `SLEEPER`, não em rampa contínua) — mais o PELT offline
+(`offline.py::segment`, via `ruptures`, para segmentação retroativa), janela
+anti-vazamento, storage SQL atrás do contrato (`SqlTrajectoryRepository`, com
+**Turso como banco atual em produção** e SQLite local como fallback/dev), política
+de cadência (`policy`), composition root, CLI (Typer), settings, adaptador real da
+YouTube API (filtrado por `videoDuration=short`), e os três workflows do GitHub
+Actions (`ci`, `collect` em cron, `discover` de disparo manual — este último
+existe porque `libsql-experimental` não tem wheel para Windows, então nada que
+precise de `[prod]` roda na máquina de trabalho).
 
-**Pendente:** BOCPD/PELT (evolução do Motor A), curva earliness×acurácia
-(evolução do `benchmark.py`), o Motor B inteiro (label, features, model,
-explain, multimodal) e o dashboard.
+**Pendente:** o Motor B inteiro (label, features, model, explain, multimodal) e
+o dashboard.
 
 ---
 
@@ -69,36 +72,47 @@ usa por baixo, então **os testes rodam offline, sem Turso e sem rede**.
 ```bash
 python -m venv .venv
 source .venv/bin/activate         # Windows: .venv\Scripts\activate
-pip install -e ".[dev,prod]"      # [dev]=testes, [prod]=cliente Turso + YouTube
+pip install -e ".[dev]"           # núcleo + testes (ruptures/PELT já incluído)
 pytest -q                         # tudo verde, sem tocar rede
 ```
+**Na máquina de trabalho (Windows sem admin), pare por aqui.** `[prod]`
+(`libsql-experimental`) não tem wheel pra Windows e não builda sem toolchain
+Rust+MSVC — tentar instalar só desperdiça tempo. Tudo que precisa de `[prod]`
+(`initdb`/`discover`/`collect` contra o Turso de verdade) roda no GitHub
+Actions, nunca localmente — ver Passo B. Em Mac/Linux, `pip install -e
+".[dev,prod]"` funciona normal e os comandos abaixo podem rodar direto.
 
 **Passo B — configurar o Turso (o banco atual):**
-```bash
-# instalar a CLI do Turso (uma vez) e logar
-curl -sSfL https://get.tur.so/install.sh | bash   # Windows: ver docs.turso.tech
-turso auth signup                 # abre o navegador, login via GitHub
 
-# criar o banco e pegar as credenciais
-turso db create breakout
-turso db show breakout --url      # -> TURSO_DATABASE_URL  (libsql://...)
-turso db tokens create breakout   # -> TURSO_AUTH_TOKEN
-```
-Copie `.env.example` para `.env` e preencha `TURSO_DATABASE_URL` e
-`TURSO_AUTH_TOKEN` (e `YOUTUBE_API_KEY` quando for coletar). Então:
-```bash
-python -m breakout initdb         # aplica o schema NO TURSO
-```
+O CLI do Turso também não tem binário pra Windows (só Darwin/Linux nos
+releases oficiais). Caminho que funciona em qualquer SO: o dashboard web.
+1. Crie conta em `app.turso.tech` (login GitHub é o mais rápido).
+2. Crie um banco (ex: `breakout`) — a página do banco mostra a **URL de
+   conexão** (`libsql://...`) → isso é o `TURSO_DATABASE_URL`.
+3. Gere um token na mesma página → isso é o `TURSO_AUTH_TOKEN`.
+4. Copie `.env.example` para `.env` e preencha os dois (e `YOUTUBE_API_KEY`).
+5. Adicione os mesmos três valores como **Secrets do GitHub Actions**
+   (Settings → Secrets and variables → Actions) — é de lá que `collect.yml` e
+   `discover.yml` os leem.
+
+Não existe `initdb` separado pra rodar: o comando `collect` já chama
+`repo.init_schema()` sozinho (idempotente) na primeira execução — então o
+primeiro `collect --once` no GitHub Actions já aplica o schema no Turso.
+
+Pra semear a carteira de vídeos, dispare o workflow `discover` manualmente
+(aba Actions do GitHub → discover → Run workflow, com uma query de busca) —
+ele roda em `ubuntu-latest`, onde `[prod]` instala normal.
 
 A partir daqui dá para desenvolver os motores inteiros usando o gerador sintético
-como fonte de verdade-conhecida; a coleta real precisa só da chave da YouTube API.
+como fonte de verdade-conhecida — não precisa esperar a coleta real acumular
+pra iterar nos detectores.
 
 > Notas: (1) a conexão com o Turso é **remota pura por HTTP** (`connection.py`) —
 > correta para os runners efêmeros; o SDK Python do Turso está em transição, então
 > confira a assinatura de `connect()` em docs.turso.tech/sdk/python se algo
 > quebrar. (2) Se o proxy corporativo bloquear o PyPI, aponte o pip para o espelho
 > interno. (3) Deixe `TURSO_*` vazio no `.env` para trabalhar 100% offline no
-> SQLite local quando quiser.
+> SQLite local quando quiser — é assim que a suíte de testes já roda.
 
 ---
 
@@ -169,8 +183,19 @@ de mudança / rajada em série de streaming, com o trade-off central **detectar 
 3. Burst detection de Kleinberg (o algoritmo canônico de rajada). ✅ pronto
    (`changepoint.py::KleinbergBurstDetector`, adaptação online via Viterbi
    incremental, Fase 3).
-4. BOCPD (probabilístico, entrega incerteza). ⬜ evolução.
-5. PELT (offline, para segmentar curvas históricas). ⬜ evolução.
+4. BOCPD (probabilístico, entrega incerteza). ✅ pronto
+   (`changepoint.py::BocpdDetector`). Estruturalmente diferente dos outros
+   três: detecta MUDANÇA DE REGIME (não aceleração), então só é confiável em
+   arquétipos com um "antes" calmo pra comparar (`SLEEPER` — e dispara ANTES
+   até da inflexão nominal). Cego pro `ROCKET`/`SLOW_BURN` (rampa contínua,
+   sem quebra discreta) — limitação honesta do método, não bug; ver o
+   docstring da classe para os dois problemas empíricos encontrados e
+   corrigidos (viés de partida fria; simetria alta/baixa do teste de reset).
+5. PELT (offline, para segmentar curvas históricas). ✅ pronto
+   (`offline.py::segment`, via `ruptures`). Não é um `Detector` (Protocol
+   online) — vê a trajetória inteira de uma vez. Serve pra anotar
+   retroativamente onde a decolagem aconteceu em curvas já coletadas
+   (sintéticas ou REAIS), não pra alarme em tempo real.
 
 Métrica central (o pulo do gato): **lead time** — quantas horas antes de o vídeo
 cruzar o limiar de "viral" o detector disparou. Sobre isso se constrói a curva
@@ -239,9 +264,11 @@ breakout/
 │   │   └── connection.py     # fábrica: Turso se configurado, senão SQLite WAL
 │   ├── engine_a/
 │   │   ├── baseline.py      # ✅ detector por aceleração (Camada 1)
-│   │   ├── changepoint.py   # ⬜ CusumDetector / KleinbergBurstDetector (stubs xfail)
+│   │   ├── changepoint.py   # ✅ CusumDetector / KleinbergBurstDetector / BocpdDetector
+│   │   ├── offline.py       # ✅ PELT (segmentação offline via `ruptures`)
 │   │   ├── replay.py        # run_detector: replay online (é teste E "modo simulação")
-│   │   └── metrics.py       # lead_time_hours, crossing_hours
+│   │   ├── metrics.py       # lead_time_hours, crossing_hours
+│   │   └── benchmark.py     # ✅ bake-off: precisão/recall, earliness, sensitivity_curve
 │   ├── engine_b/
 │   │   └── windows.py       # window_before: barreira anti-vazamento
 │   └── synth/
@@ -312,14 +339,18 @@ o dashboard puxa UMA trajetória por vez, nunca o banco inteiro na memória.
 
 ## 11. Stack
 
-**Núcleo:** `python` · `numpy` · `pandas` · `typer` · `pydantic-settings`.
+**Núcleo:** `python` · `numpy` · `pandas` · `typer` · `pydantic-settings` ·
+`ruptures` (PELT, Motor A). `scipy` é dependência direta (Student-t/logsumexp do
+BOCPD), embora só apareça explícita transitivamente via `ruptures`.
 **Testes (`[dev]`):** `pytest` · `pytest-cov` · `hypothesis` · `time-machine` ·
 `respx` · `syrupy`.
 **Produção (`[prod]`):** `google-api-python-client` · `libsql-experimental` (Turso).
-Como o Turso é o banco atual, instale `.[dev,prod]` já no dev (o cliente libsql é
-necessário para falar com o banco; os testes continuam offline via SQLite).
-**Motores (`[engines]`, fases seguintes):** `ruptures` (PELT) · `river` (online) ·
-`scikit-learn` · `shap` · `matplotlib`/`plotly` · `streamlit`. Multimodal (evolução):
+**NÃO instala no Windows sem admin** (`libsql-experimental` não tem wheel pra
+Windows nem builda sem toolchain Rust+MSVC). Na máquina de trabalho, instale só
+`.[dev]`; tudo que precisa de `[prod]` roda via GitHub Actions
+(`collect`/`discover`), nunca localmente.
+**Motores (`[engines]`, fases seguintes):** `river` (online) · `scikit-learn` ·
+`shap` · `matplotlib`/`plotly` · `streamlit`. Multimodal (evolução):
 `opencv`/`Pillow` (thumbnail), `whisper` (transcrição).
 **Dev sem admin:** `venv` ou `uv`; Docker está fora (e não é necessário).
 
@@ -339,7 +370,11 @@ necessário para falar com o banco; os testes continuam offline via SQLite).
   alarme sobre `takeoff_hours`, earliness via `lead_time_hours`, mesma bateria
   p/ todos os detectores). ⬜ curva earliness×acurácia (variar sensibilidade de
   cada detector e plotar o trade-off) fica para quando o dashboard existir.
-- **Fase 3 — Algoritmos avançados (Motor A).** ✅ Kleinberg. ⬜ BOCPD; PELT offline.
+- **Fase 3 — Algoritmos avançados (Motor A).** ✅ Kleinberg. ✅ BOCPD (com a
+  limitação honesta de só disparar em regime-troca, não em rampa contínua).
+  ✅ PELT offline (`ruptures`). ✅ curva earliness×acurácia (`sensitivity_curve`
+  em `benchmark.py`). Motor A fechado — só falta BOCPD/PELT rodarem sobre
+  dados REAIS quando a Fase 1 acumular trajetórias longas o suficiente.
 - **Fase 4 — Elementos: metadados (Motor B).** ⬜ `label.py` (definição de viral +
   amostragem sem viés) · `features.py` · `model.py` · `explain.py` (SHAP).
 - **Fase 5 — Elementos: multimodal (Motor B).** ⬜ thumbnail (CV) + transcrição.

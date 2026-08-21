@@ -17,6 +17,7 @@ lá na geração do batch (evita a pegadinha de misturar limiares diferentes).
 from __future__ import annotations
 
 import dataclasses
+from typing import Callable
 
 import pandas as pd
 
@@ -95,3 +96,27 @@ def bakeoff(
     """Roda vários detectores sobre a MESMA bateria — uma linha por detector."""
     rows = [evaluate_detector(d, batch, threshold) for d in detectors]
     return pd.DataFrame([dataclasses.asdict(r) for r in rows])
+
+
+def sensitivity_curve(
+    make_detector: Callable[[float], Detector],
+    param_values: list[float],
+    batch: list[tuple[Trajectory, GroundTruth]],
+    threshold: int,
+) -> pd.DataFrame:
+    """Varre um parâmetro de sensibilidade de UM detector e resume o
+    trade-off earliness × acurácia — o gráfico que expõe visualmente o
+    "detectar cedo × não dar alarme falso" que está no coração do Motor A
+    (Seção 6 do CLAUDE.md). Mesma bateria e mesmo `threshold` em todo ponto da
+    curva — só o parâmetro varia.
+
+    `make_detector` constrói um detector NOVO pra cada valor (cada ponto da
+    curva precisa de um detector fresco, sem estado vazado do ponto anterior).
+    """
+    rows = []
+    for value in param_values:
+        result = evaluate_detector(make_detector(value), batch, threshold)
+        row = dataclasses.asdict(result)
+        row["param_value"] = value
+        rows.append(row)
+    return pd.DataFrame(rows)

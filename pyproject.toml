@@ -8,6 +8,7 @@ dependencies = [
     "pandas>=2.1",
     "typer>=0.12",
     "pydantic-settings>=2.2",
+    "ruptures>=1.1",
 ]
 
 [project.optional-dependencies]
@@ -27,7 +28,6 @@ prod = [
 ]
 # Motores completos (fases seguintes).
 engines = [
-    "ruptures>=1.1",
     "river>=0.21",
     "scikit-learn>=1.4",
     "shap>=0.45",

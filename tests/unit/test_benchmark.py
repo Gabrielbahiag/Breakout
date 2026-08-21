@@ -12,7 +12,7 @@ import math
 import pytest
 
 from breakout.engine_a.baseline import BaselineDetector
-from breakout.engine_a.benchmark import bakeoff, evaluate_detector
+from breakout.engine_a.benchmark import bakeoff, evaluate_detector, sensitivity_curve
 from breakout.engine_a.changepoint import CusumDetector
 from breakout.synth.trajectories import VIRAL_THRESHOLD_DEFAULT, make_batch
 from breakout.types import Detection
@@ -91,3 +91,32 @@ def test_bakeoff_retorna_uma_linha_por_detector():
     assert len(df) == 2
     assert set(df["detector"]) == {"baseline_accel", "cusum"}
     assert (df["n"] == len(_BATCH)).all()
+
+
+def test_sensitivity_curve_retorna_uma_linha_por_valor_de_parametro():
+    values = [500, 3000, 12000]
+    df = sensitivity_curve(
+        lambda th: CusumDetector(threshold=th),
+        values,
+        _BATCH,
+        threshold=VIRAL_THRESHOLD_DEFAULT,
+    )
+    assert list(df["param_value"]) == values
+    assert (df["detector"] == "cusum").all()
+
+
+def test_sensitivity_curve_expoe_o_trade_off_earliness_x_acuracia():
+    # threshold do CUSUM mais alto = mais conservador = dispara mais tarde
+    # (earliness cai) e perde mais casos (recall cai) — o trade-off central
+    # do Motor A (Seção 6 do CLAUDE.md), visível na mesma bateria.
+    values = [500, 1000, 2000, 3000, 5000, 8000, 12000]
+    df = sensitivity_curve(
+        lambda th: CusumDetector(threshold=th),
+        values,
+        _BATCH,
+        threshold=VIRAL_THRESHOLD_DEFAULT,
+    )
+    lead = df["mean_lead_time_hours"].tolist()
+    assert all(a >= b for a, b in zip(lead, lead[1:]))  # não-crescente
+    assert lead[0] > lead[-1]                            # trade-off de fato existe
+    assert df["recall"].iloc[0] >= df["recall"].iloc[-1]
