@@ -1,0 +1,6 @@
+# Usado pelo Streamlit Community Cloud pra instalar o app (Fase 6).
+# Instala o pacote breakout do próprio repo + os extras [prod] (Turso/YouTube,
+# roda normal no Linux do Streamlit Cloud) e [dashboard] (streamlit).
+# Ver Seção 10 do CLAUDE.md. Não usado em dev local nem no CI — lá é
+# `pip install -e ".[dev]"` (ver pyproject.toml).
+.[prod,dashboard]
