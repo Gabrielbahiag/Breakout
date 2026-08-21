@@ -30,13 +30,14 @@ teto honesto do problema.
 
 ## 2. Estado atual (o que já existe)
 
-O esqueleto **já está construído e roda verde**: `pytest` → 84 testes passando,
+O esqueleto **já está construído e roda verde**: `pytest` → 113 testes passando,
 **zero `xfail`**. **Fase 0 fechada de verdade**: repo público
 (`Gabrielbahiag/Breakout`), Turso em produção, YouTube API key configurada,
 coletor rodando no cron do GitHub Actions e já validado com dados reais
 (`discover` semeou vídeos, `collect` gravou snapshots reais no Turso). **Motor A
-completo, incluindo as evoluções da Fase 3** (baseline + CUSUM + Kleinberg +
-BOCPD + PELT + bake-off com curva de sensibilidade). O que está pronto vs.
+completo** (baseline + CUSUM + Kleinberg + BOCPD + PELT + bake-off com curva de
+sensibilidade). **Motor B — Fase 4 fechada** (label + features + model + explain,
+validados com dataset sintético de sinal plantado). O que está pronto vs.
 pendente:
 
 **Pronto e testado:** contratos (Protocols), tipos do domínio, gerador de
@@ -47,17 +48,22 @@ sensibilidade (`benchmark.py`), os detectores do Motor A — `BaselineDetector`
 (autômato de estados via Viterbi incremental, Fase 3), `BocpdDetector`
 (Bayesian Online Change Point Detection, Fase 3 evolução — só confiável em
 regime-troca tipo `SLEEPER`, não em rampa contínua) — mais o PELT offline
-(`offline.py::segment`, via `ruptures`, para segmentação retroativa), janela
-anti-vazamento, storage SQL atrás do contrato (`SqlTrajectoryRepository`, com
-**Turso como banco atual em produção** e SQLite local como fallback/dev), política
-de cadência (`policy`), composition root, CLI (Typer), settings, adaptador real da
-YouTube API (filtrado por `videoDuration=short`), e os três workflows do GitHub
-Actions (`ci`, `collect` em cron, `discover` de disparo manual — este último
-existe porque `libsql-experimental` não tem wheel para Windows, então nada que
-precise de `[prod]` roda na máquina de trabalho).
+(`offline.py::segment`, via `ruptures`, para segmentação retroativa). Motor B —
+`label.py` (limiar + percentil, defesa contra viés de seleção), `features.py`
+(estáticas + engajamento inicial via `snapshots_before`), `model.py`
+(RandomForest, métricas honestas), `explain.py` (SHAP TreeExplainer). Janela
+anti-vazamento (`window_before`/`snapshots_before`), storage SQL atrás do
+contrato (`SqlTrajectoryRepository` — inclui `get_snapshots()` pro Motor B —
+com **Turso como banco atual em produção** e SQLite local como fallback/dev),
+política de cadência (`policy`), composition root, CLI (Typer), settings,
+adaptador real da YouTube API (filtrado por `videoDuration=short`), e os três
+workflows do GitHub Actions (`ci`, `collect` em cron, `discover` de disparo
+manual — este último existe porque `libsql-experimental` não tem wheel para
+Windows, então nada que precise de `[prod]` roda na máquina de trabalho).
 
-**Pendente:** o Motor B inteiro (label, features, model, explain, multimodal) e
-o dashboard.
+**Pendente:** Motor B multimodal (Fase 5 — thumbnail via CV, transcrição via
+NLP), treinar/explicar o modelo sobre dados REAIS (falta acumular outcomes) e
+o dashboard (Fase 6).
 
 ---
 
@@ -274,7 +280,9 @@ breakout/
 │   ├── engine_b/
 │   │   ├── windows.py       # window_before / snapshots_before: barreira anti-vazamento
 │   │   ├── label.py         # ✅ label_by_threshold / label_by_percentile (viés de seleção)
-│   │   └── features.py      # ✅ extract_features: estáticas (upload) + dinâmicas (via snapshots_before)
+│   │   ├── features.py      # ✅ extract_features: estáticas (upload) + dinâmicas (via snapshots_before)
+│   │   ├── model.py         # ✅ RandomForestClassifier (train/evaluate, métricas honestas)
+│   │   └── explain.py       # ✅ SHAP (TreeExplainer): feature_importance, shap_values
 │   └── synth/
 │       └── trajectories.py  # gerador sintético com verdade-conhecida (5 arquétipos)
 └── tests/
@@ -344,8 +352,9 @@ o dashboard puxa UMA trajetória por vez, nunca o banco inteiro na memória.
 ## 11. Stack
 
 **Núcleo:** `python` · `numpy` · `pandas` · `typer` · `pydantic-settings` ·
-`ruptures` (PELT, Motor A). `scipy` é dependência direta (Student-t/logsumexp do
-BOCPD), embora só apareça explícita transitivamente via `ruptures`.
+`ruptures` (PELT, Motor A) · `scikit-learn` (`model.py`) · `shap` (`explain.py`).
+`scipy` é dependência direta (Student-t/logsumexp do BOCPD), embora só apareça
+explícita transitivamente via `ruptures`.
 **Testes (`[dev]`):** `pytest` · `pytest-cov` · `hypothesis` · `time-machine` ·
 `respx` · `syrupy`.
 **Produção (`[prod]`):** `google-api-python-client` · `libsql-experimental` (Turso).
@@ -353,9 +362,9 @@ BOCPD), embora só apareça explícita transitivamente via `ruptures`.
 Windows nem builda sem toolchain Rust+MSVC). Na máquina de trabalho, instale só
 `.[dev]`; tudo que precisa de `[prod]` roda via GitHub Actions
 (`collect`/`discover`), nunca localmente.
-**Motores (`[engines]`, fases seguintes):** `river` (online) · `scikit-learn` ·
-`shap` · `matplotlib`/`plotly` · `streamlit`. Multimodal (evolução):
-`opencv`/`Pillow` (thumbnail), `whisper` (transcrição).
+**Motores (`[engines]`, fases seguintes) e dashboard:** `river` (online, ainda
+não usado por nada) · `matplotlib`/`plotly` · `streamlit`. Multimodal
+(evolução): `opencv`/`Pillow` (thumbnail), `whisper` (transcrição).
 **Dev sem admin:** `venv` ou `uv`; Docker está fora (e não é necessário).
 
 ---
@@ -379,11 +388,15 @@ Windows nem builda sem toolchain Rust+MSVC). Na máquina de trabalho, instale s�
   ✅ PELT offline (`ruptures`). ✅ curva earliness×acurácia (`sensitivity_curve`
   em `benchmark.py`). Motor A fechado — só falta BOCPD/PELT rodarem sobre
   dados REAIS quando a Fase 1 acumular trajetórias longas o suficiente.
-- **Fase 4 — Elementos: metadados (Motor B).** ✅ `label.py` (limiar +
-  percentil, com defesa contra viés de seleção). ✅ `features.py` (estáticas +
+- **Fase 4 — Elementos: metadados (Motor B).** ✅ Fechada. `label.py` (limiar +
+  percentil, com defesa contra viés de seleção). `features.py` (estáticas +
   engajamento inicial via `snapshots_before`; exigiu estender o contrato
   `TrajectoryRepository` com `get_snapshots()`, já que `get_trajectory` só
-  carrega views). ⬜ `model.py` · `explain.py` (SHAP).
+  carrega views). `model.py` (RandomForest, métricas honestas — nunca só
+  accuracy, classe viral é minoritária). `explain.py` (SHAP TreeExplainer).
+  Validado test-first com dataset sintético de sinal PLANTADO (mesmo truque
+  do Motor A) — falta treinar/explicar sobre dados REAIS quando a coleta
+  acumular outcomes suficientes.
 - **Fase 5 — Elementos: multimodal (Motor B).** ⬜ thumbnail (CV) + transcrição.
 - **Fase 6 — Unificação + dashboard.** ⬜ curva + ponto de decolagem + fatores;
   README com o demo (lead time visível) e as métricas honestas.
