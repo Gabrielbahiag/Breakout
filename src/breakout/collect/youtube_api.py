@@ -68,6 +68,7 @@ class YouTubeApiClient:
                     part="id",
                     type="video",
                     order="date",
+                    videoDuration="short",  # <4min — o filtro mais próximo de Shorts na API
                     publishedAfter=published_after.isoformat().replace("+00:00", "Z"),
                     maxResults=min(max_results, 50),
                 )
