@@ -1,11 +1,9 @@
 """Testes dos detectores avançados.
 
-CUSUM (Fase 2) já está implementado — testado pelas mesmas propriedades
-estruturais de `test_baseline.py` (nunca dispara no primeiro ponto, dispara
-nos arquétipos que decolam, silencia no STILLBORN, é determinístico). Kleinberg
-(Fase 3) continua em 'test-first': marcado `xfail(raises=NotImplementedError)`,
-falha como esperado até ser implementado — no dia em que virar `xpass`, é o
-sinal pra remover o marcador.
+CUSUM (Fase 2) e Kleinberg (Fase 3) estão implementados — testados pelas
+mesmas propriedades estruturais de `test_baseline.py` (nunca dispara no
+primeiro ponto, dispara nos arquétipos que decolam, silencia no STILLBORN, é
+determinístico).
 """
 from __future__ import annotations
 
@@ -61,8 +59,41 @@ def test_cusum_reset_permite_reprocessar():
     assert first == second             # determinístico
 
 
-@pytest.mark.xfail(raises=NotImplementedError, reason="Fase 3: autômato de Kleinberg")
-def test_kleinberg_dispara_em_rocket():
-    traj, _ = make_trajectory(Archetype.ROCKET, seed=1)
-    hit = run_detector(KleinbergBurstDetector(), traj)
+def test_kleinberg_honra_o_contrato_detector():
+    from breakout.contracts import Detector
+
+    assert isinstance(KleinbergBurstDetector(), Detector)
+
+
+@given(seed=st.integers(min_value=0, max_value=2_000))
+@settings(max_examples=30, deadline=None)
+def test_kleinberg_nunca_dispara_no_primeiro_ponto(seed):
+    det = KleinbergBurstDetector()
+    traj, _ = make_trajectory(Archetype.ROCKET, seed=seed)
+    first_t, first_v = next(traj.stream())
+    det.reset()
+    assert det.update(first_t, first_v) is None
+
+
+@pytest.mark.parametrize("archetype", [Archetype.ROCKET, Archetype.SLEEPER, Archetype.SLOW_BURN])
+def test_kleinberg_dispara_nos_arquetipos_que_decolam(archetype):
+    det = KleinbergBurstDetector()
+    traj, _ = make_trajectory(archetype, seed=3)
+    hit = run_detector(det, traj)
     assert hit is not None
+    assert hit.at_hours > 0
+    assert hit.at_hours <= traj.t_hours[-1]
+
+
+def test_kleinberg_silencia_no_arquetipo_morto():
+    det = KleinbergBurstDetector()
+    traj, _ = make_trajectory(Archetype.STILLBORN, seed=3)
+    assert run_detector(det, traj) is None
+
+
+def test_kleinberg_reset_permite_reprocessar():
+    det = KleinbergBurstDetector()
+    traj, _ = make_trajectory(Archetype.ROCKET, seed=5)
+    first = run_detector(det, traj)
+    second = run_detector(det, traj)
+    assert first == second
