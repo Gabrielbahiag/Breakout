@@ -109,4 +109,7 @@ nada de produção aparece na suíte.
     python -m venv .venv && . .venv/bin/activate    # ou: uv venv
     pip install -e ".[dev]"     # núcleo + ferramentas de teste
     pytest -q                   # tudo verde
-    # produção adiciona: pip install -e ".[prod]"  (google-api + libsql)
+    # produção adiciona: pip install -e ".[prod]"  (google-api + libsql — NÃO
+    # instala no Windows sem admin; roda via GitHub Actions, nunca localmente)
+    # dashboard local: pip install -e ".[dashboard]"  (streamlit — funciona no
+    # Windows, testa contra SQLite local sem precisar de [prod])

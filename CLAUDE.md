@@ -37,8 +37,9 @@ coletor rodando no cron do GitHub Actions e já validado com dados reais
 (`discover` semeou vídeos, `collect` gravou snapshots reais no Turso). **Motor A
 completo** (baseline + CUSUM + Kleinberg + BOCPD + PELT + bake-off com curva de
 sensibilidade). **Motor B — Fase 4 fechada** (label + features + model + explain,
-validados com dataset sintético de sinal plantado). O que está pronto vs.
-pendente:
+validados com dataset sintético de sinal plantado). **Dashboard (`dashboard.py`)
+pronto e testado localmente** (modo dados reais + modo demo sintético) — falta só
+o deploy no Streamlit Community Cloud (Seção 10). O que está pronto vs. pendente:
 
 **Pronto e testado:** contratos (Protocols), tipos do domínio, gerador de
 trajetórias sintéticas (`synth`), fakes de teste, coletor de snapshots, harness de
@@ -62,8 +63,8 @@ manual — este último existe porque `libsql-experimental` não tem wheel para
 Windows, então nada que precise de `[prod]` roda na máquina de trabalho).
 
 **Pendente:** Motor B multimodal (Fase 5 — thumbnail via CV, transcrição via
-NLP), treinar/explicar o modelo sobre dados REAIS (falta acumular outcomes) e
-o dashboard (Fase 6).
+NLP), treinar/explicar o modelo sobre dados REAIS (falta acumular outcomes), e
+o deploy do dashboard no Streamlit Community Cloud (o código já está pronto).
 
 ---
 
@@ -249,11 +250,12 @@ breakout/
 ├── CLAUDE.md            # este arquivo (contexto-mestre)
 ├── TESTING.md           # aprofundamento da camada de testes
 ├── ARCHITECTURE.md      # aprofundamento da execução/deploy
-├── pyproject.toml       # deps, extras [dev]/[prod]/[engines], config do pytest
+├── pyproject.toml       # deps, extras [dev]/[prod]/[dashboard]/[engines], config do pytest
 ├── .env.example         # YOUTUBE_API_KEY, TURSO_* (copie para .env em dev)
 ├── .github/workflows/
 │   ├── ci.yml           # roda pytest a cada push
-│   └── collect.yml      # coletor agendado (cron), chama `collect --once`
+│   ├── collect.yml      # coletor agendado (cron), chama `collect --once`
+│   └── discover.yml     # semeia a carteira (disparo manual — gasta cota de search)
 ├── src/breakout/
 │   ├── types.py         # Snapshot, VideoMetadata, Trajectory, Detection, GroundTruth, Archetype
 │   ├── contracts.py     # os 4 Protocols
@@ -283,8 +285,9 @@ breakout/
 │   │   ├── features.py      # ✅ extract_features: estáticas (upload) + dinâmicas (via snapshots_before)
 │   │   ├── model.py         # ✅ RandomForestClassifier (train/evaluate, métricas honestas)
 │   │   └── explain.py       # ✅ SHAP (TreeExplainer): feature_importance, shap_values
-│   └── synth/
-│       └── trajectories.py  # gerador sintético com verdade-conhecida (5 arquétipos)
+│   ├── synth/
+│   │   └── trajectories.py  # gerador sintético com verdade-conhecida (5 arquétipos)
+│   └── dashboard.py     # ✅ Streamlit: modo "dados reais" (Turso) + "demo sintético"
 └── tests/
     ├── conftest.py          # fixtures (fakes, rng com seed, fábrica de trajetórias)
     ├── fakes/               # ManualClock, InMemoryTrajectoryRepository, FakeYouTubeClient
@@ -323,18 +326,23 @@ nunca `==`.
 
 ## 10. Indo pro ar (o que resta depois do Turso)
 
-O Turso (banco atual) já foi configurado no bootstrap (Seção 3). O que resta para
-o deploy completo:
+Itens 1-4 já estão feitos (Fase 0 fechada — Seção 12). O que resta pro deploy
+completo:
 
-1. **Chave da YouTube API** (Google Cloud Console) → habilita a coleta real.
-2. **Repositório público no GitHub** → CI (`ci.yml`) roda o pytest, selo verde.
-3. **Secrets** → `YOUTUBE_API_KEY`, `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` nos
-   **Secrets do GitHub Actions** (e do Streamlit). **Nunca no disco da máquina do
-   trabalho.**
-4. **Ligar o coletor** (`collect.yml`) → começa a acumular trajetórias. Fazer isto
-   CEDO: dados levam tempo, é a decisão mais importante do projeto.
-5. **Dashboard no Streamlit Community Cloud** → deploya do GitHub, lê o Turso,
-   roda o Motor A como replay ao vivo.
+1. ✅ **Chave da YouTube API** (Google Cloud Console).
+2. ✅ **Repositório público no GitHub** (`Gabrielbahiag/Breakout`) — CI verde.
+3. ✅ **Secrets** (`YOUTUBE_API_KEY`, `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`)
+   nos Secrets do GitHub Actions. **Nunca no disco da máquina do trabalho.**
+4. ✅ **Coletor ligado** (`collect.yml`, cron `:23`) — já acumulando trajetórias
+   reais.
+5. ⬜ **Dashboard no Streamlit Community Cloud**: `dashboard.py` já existe e
+   funciona (testado localmente com `AppTest`) — falta só o deploy em si.
+   Passos: criar conta em `share.streamlit.io` (login GitHub), apontar pro
+   repo/`src/breakout/dashboard.py`, e configurar os MESMOS três secrets nos
+   **Secrets do app Streamlit** (formato TOML, painel do app → Settings →
+   Secrets). O ambiente do Streamlit Cloud é Linux, então `[prod]` (libsql)
+   instala normal — diferente da máquina de trabalho. Dependências pra
+   declarar no deploy: `.[prod,dashboard]`.
 
 > Perf com Turso remoto: `save_snapshot` faz `commit()` por chamada, o que é um
 > round-trip HTTP por snapshot. Numa coleta em lote isso é lento — otimização de
@@ -362,9 +370,13 @@ explícita transitivamente via `ruptures`.
 Windows nem builda sem toolchain Rust+MSVC). Na máquina de trabalho, instale só
 `.[dev]`; tudo que precisa de `[prod]` roda via GitHub Actions
 (`collect`/`discover`), nunca localmente.
-**Motores (`[engines]`, fases seguintes) e dashboard:** `river` (online, ainda
-não usado por nada) · `matplotlib`/`plotly` · `streamlit`. Multimodal
-(evolução): `opencv`/`Pillow` (thumbnail), `whisper` (transcrição).
+**Dashboard (`[dashboard]`):** `streamlit` (Altair vem embutido — não precisa
+listar). `dashboard.py` roda local contra SQLite (testável na máquina de
+trabalho, sem `[prod]`) e em produção contra o Turso (Streamlit Cloud, Linux,
+onde `[prod]` instala normal — precisa de `.[prod,dashboard]` no deploy).
+**Motores (`[engines]`, fases seguintes):** `river` (online, ainda não usado
+por nada) · `matplotlib`/`plotly`. Multimodal (evolução): `opencv`/`Pillow`
+(thumbnail), `whisper` (transcrição).
 **Dev sem admin:** `venv` ou `uv`; Docker está fora (e não é necessário).
 
 ---
@@ -398,8 +410,12 @@ não usado por nada) · `matplotlib`/`plotly` · `streamlit`. Multimodal
   do Motor A) — falta treinar/explicar sobre dados REAIS quando a coleta
   acumular outcomes suficientes.
 - **Fase 5 — Elementos: multimodal (Motor B).** ⬜ thumbnail (CV) + transcrição.
-- **Fase 6 — Unificação + dashboard.** ⬜ curva + ponto de decolagem + fatores;
-  README com o demo (lead time visível) e as métricas honestas.
+- **Fase 6 — Unificação + dashboard.** ✅ `dashboard.py` (Streamlit): curva com
+  ponto de decolagem marcado, KPIs de lead time, e a seção do Motor B (SHAP
+  sobre demo sintético enquanto dado real não acumula outcomes; features reais
+  quando há metadados). Testado localmente com `AppTest` (sem navegador) nos
+  dois modos. ⬜ deploy no Streamlit Community Cloud (conta + conectar o repo —
+  ver Seção 10) e README com o demo.
 
 ---
 

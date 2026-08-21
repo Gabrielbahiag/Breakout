@@ -28,12 +28,17 @@ prod = [
     "google-api-python-client>=2.120",
     "libsql-experimental>=0.0.40",
 ]
-# Motores completos (fases seguintes) e dashboard.
+# Dashboard (Fase 6, Streamlit Community Cloud). Altair vem embutido no
+# streamlit, não precisa listar. Combina com [prod] no deploy (o dashboard
+# lê o Turso em produção).
+dashboard = [
+    "streamlit>=1.33",
+]
+# Motores completos (fases seguintes) — ainda não usado por nada.
 engines = [
     "river>=0.21",
     "matplotlib>=3.8",
     "plotly>=5.20",
-    "streamlit>=1.33",
 ]
 
 [project.scripts]
