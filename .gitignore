@@ -1,0 +1,23 @@
+# dados coletados / trajetórias — NÃO versionar
+data/
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# testes / ferramentas
+.pytest_cache/
+.hypothesis/
+.coverage
+htmlcov/
+.ruff_cache/
+.mypy_cache/
+
+# ambiente
+.venv/
+venv/
+.env

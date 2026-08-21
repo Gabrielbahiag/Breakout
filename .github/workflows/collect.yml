@@ -1,0 +1,31 @@
+name: collect
+
+# Coletor na nuvem do GitHub — roda independente da sua máquina.
+# Lembre: o agendamento é best-effort (atrasos de 5-30min são normais). Nosso
+# desenho tolera cadência irregular, então isso degrada resolução, não correção.
+on:
+  schedule:
+    - cron: "23 * * * *"   # de hora em hora, no minuto :23 p/ fugir do pico (:00)
+  workflow_dispatch:       # disparo manual p/ testar
+
+# Nunca deixa duas coletas se atropelarem.
+concurrency:
+  group: collect
+  cancel-in-progress: false
+
+jobs:
+  sample:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Instalar dependências de produção
+        run: pip install -e ".[prod]"
+      - name: Coletar uma rodada
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+        run: python -m breakout collect --once
