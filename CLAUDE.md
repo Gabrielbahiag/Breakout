@@ -30,21 +30,27 @@ teto honesto do problema.
 
 ## 2. Estado atual (o que já existe)
 
-O esqueleto **já está construído e roda verde**: `pytest` → 51 testes passando +
-2 `xfail` (detectores avançados, propositalmente pendentes). O que está pronto vs.
-pendente:
+O esqueleto **já está construído e roda verde**: `pytest` → 58 testes passando +
+1 `xfail` (Kleinberg, propositalmente pendente). **Fase 0 fechada de verdade**:
+repo público (`Gabrielbahiag/Breakout`), Turso em produção, YouTube API key
+configurada, coletor rodando no cron do GitHub Actions e já validado com dados
+reais (`discover` semeou vídeos, `collect` gravou snapshots reais no Turso). O
+que está pronto vs. pendente:
 
 **Pronto e testado:** contratos (Protocols), tipos do domínio, gerador de
 trajetórias sintéticas (`synth`), fakes de teste, coletor de snapshots, harness de
-replay, métrica de lead time, `BaselineDetector` (aceleração), janela
-anti-vazamento, storage SQL atrás do contrato (`SqlTrajectoryRepository`, com
-**Turso como banco atual** e SQLite local como fallback), política de cadência
-(`policy`), composition root, CLI (Typer), settings, adaptador real da YouTube API,
-e os dois workflows do GitHub Actions.
+replay, métrica de lead time, `BaselineDetector` (aceleração), `CusumDetector`
+(Page-Hinkley, Fase 2), janela anti-vazamento, storage SQL atrás do contrato
+(`SqlTrajectoryRepository`, com **Turso como banco atual em produção** e SQLite
+local como fallback/dev), política de cadência (`policy`), composition root, CLI
+(Typer), settings, adaptador real da YouTube API (filtrado por `videoDuration=
+short`), e os três workflows do GitHub Actions (`ci`, `collect` em cron, `discover`
+de disparo manual — este último existe porque `libsql-experimental` não tem wheel
+para Windows, então nada que precise de `[prod]` roda na máquina de trabalho).
 
-**Pendente (test-first, marcado `xfail`):** `CusumDetector` (Fase 2),
-`KleinbergBurstDetector` (Fase 3), BOCPD/PELT, o Motor B inteiro (label, features,
-model, explain, multimodal) e o dashboard.
+**Pendente (test-first, marcado `xfail`):** `KleinbergBurstDetector` (Fase 3),
+BOCPD/PELT, `benchmark.py` (lead time/precisão/recall), o Motor B inteiro (label,
+features, model, explain, multimodal) e o dashboard.
 
 ---
 
@@ -155,7 +161,7 @@ troca é só a conexão no composition root.
 de mudança / rajada em série de streaming, com o trade-off central **detectar cedo
 × não dar alarme falso**. Implementado em camadas:
 1. Baseline — velocidade/aceleração (EWMA). ✅ pronto (`baseline.py`).
-2. CUSUM / Page-Hinkley. ⬜ Fase 2.
+2. CUSUM / Page-Hinkley. ✅ pronto (`changepoint.py::CusumDetector`, Fase 2).
 3. Burst detection de Kleinberg (o algoritmo canônico de rajada). ⬜ Fase 3.
 4. BOCPD (probabilístico, entrega incerteza). ⬜ evolução.
 5. PELT (offline, para segmentar curvas históricas). ⬜ evolução.
@@ -315,13 +321,15 @@ necessário para falar com o banco; os testes continuam offline via SQLite).
 
 ## 12. Roadmap por fases
 
-- **Fase 0 — Fundação + coleta.** ✅ repo/pyproject/pytest, coletor, storage.
-  ⬜ implementar `discover` real, obter chave da API e **ligar a coleta** para
-  começar a acumular trajetórias.
+- **Fase 0 — Fundação + coleta.** ✅ repo/pyproject/pytest, coletor, storage,
+  `discover` real, chave da API, coleta ligada no cron do GitHub Actions e
+  validada com dados reais (fechada em 2026-08-21).
 - **Fase 1 — Trajetórias + baseline (Motor A).** ✅ baseline por aceleração + synth.
-  ⬜ montar dataset de curvas a partir da coleta real.
-- **Fase 2 — Detecção online + métricas (Motor A).** ⬜ `CusumDetector` (vira o
-  primeiro `xfail` verde); `benchmark.py` (lead time, precisão/recall,
+  Dataset de curvas a partir da coleta real: o mecanismo já existe
+  (`get_trajectory` monta a curva de qualquer vídeo com ≥1 snapshot) — falta só
+  tempo de cron acumulando múltiplos snapshots por vídeo, não código.
+- **Fase 2 — Detecção online + métricas (Motor A).** ✅ `CusumDetector`
+  (Page-Hinkley, xfail removido). ⬜ `benchmark.py` (lead time, precisão/recall,
   earliness×acurácia).
 - **Fase 3 — Algoritmos avançados (Motor A).** ⬜ Kleinberg; BOCPD; PELT offline.
 - **Fase 4 — Elementos: metadados (Motor B).** ⬜ `label.py` (definição de viral +

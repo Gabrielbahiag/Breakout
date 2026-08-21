@@ -1,13 +1,17 @@
-"""Testes dos detectores avançados — em estado 'test-first'.
+"""Testes dos detectores avançados.
 
-O contrato já está fechado, a implementação não. Marcamos como `xfail(raises=
-NotImplementedError)`: enquanto não implementado, o teste "falha como esperado"
-(xfail). No dia em que você implementar o CUSUM na IDE, ele passa e o pytest
-reporta `XPASS`, te avisando que a feature ficou pronta. É o roteiro da Fase 2/3.
+CUSUM (Fase 2) já está implementado — testado pelas mesmas propriedades
+estruturais de `test_baseline.py` (nunca dispara no primeiro ponto, dispara
+nos arquétipos que decolam, silencia no STILLBORN, é determinístico). Kleinberg
+(Fase 3) continua em 'test-first': marcado `xfail(raises=NotImplementedError)`,
+falha como esperado até ser implementado — no dia em que virar `xpass`, é o
+sinal pra remover o marcador.
 """
 from __future__ import annotations
 
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from breakout.engine_a.changepoint import CusumDetector, KleinbergBurstDetector
 from breakout.engine_a.replay import run_detector
@@ -17,11 +21,44 @@ from breakout.types import Archetype
 pytestmark = pytest.mark.unit
 
 
-@pytest.mark.xfail(raises=NotImplementedError, reason="Fase 2: CUSUM/Page-Hinkley")
-def test_cusum_dispara_em_rocket():
-    traj, _ = make_trajectory(Archetype.ROCKET, seed=1)
-    hit = run_detector(CusumDetector(), traj)
+def test_cusum_honra_o_contrato_detector():
+    from breakout.contracts import Detector
+
+    assert isinstance(CusumDetector(), Detector)
+
+
+@given(seed=st.integers(min_value=0, max_value=2_000))
+@settings(max_examples=30, deadline=None)
+def test_cusum_nunca_dispara_no_primeiro_ponto(seed):
+    det = CusumDetector()
+    traj, _ = make_trajectory(Archetype.ROCKET, seed=seed)
+    first_t, first_v = next(traj.stream())
+    det.reset()
+    assert det.update(first_t, first_v) is None
+
+
+@pytest.mark.parametrize("archetype", [Archetype.ROCKET, Archetype.SLEEPER, Archetype.SLOW_BURN])
+def test_cusum_dispara_nos_arquetipos_que_decolam(archetype):
+    det = CusumDetector()
+    traj, _ = make_trajectory(archetype, seed=3)
+    hit = run_detector(det, traj)
     assert hit is not None
+    assert hit.at_hours > 0            # nunca no instante inicial
+    assert hit.at_hours <= traj.t_hours[-1]
+
+
+def test_cusum_silencia_no_arquetipo_morto():
+    det = CusumDetector()
+    traj, _ = make_trajectory(Archetype.STILLBORN, seed=3)
+    assert run_detector(det, traj) is None
+
+
+def test_cusum_reset_permite_reprocessar():
+    det = CusumDetector()
+    traj, _ = make_trajectory(Archetype.ROCKET, seed=5)
+    first = run_detector(det, traj)
+    second = run_detector(det, traj)   # run_detector já chama reset()
+    assert first == second             # determinístico
 
 
 @pytest.mark.xfail(raises=NotImplementedError, reason="Fase 3: autômato de Kleinberg")
