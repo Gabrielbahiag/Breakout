@@ -30,27 +30,28 @@ teto honesto do problema.
 
 ## 2. Estado atual (o que já existe)
 
-O esqueleto **já está construído e roda verde**: `pytest` → 58 testes passando +
+O esqueleto **já está construído e roda verde**: `pytest` → 62 testes passando +
 1 `xfail` (Kleinberg, propositalmente pendente). **Fase 0 fechada de verdade**:
 repo público (`Gabrielbahiag/Breakout`), Turso em produção, YouTube API key
 configurada, coletor rodando no cron do GitHub Actions e já validado com dados
-reais (`discover` semeou vídeos, `collect` gravou snapshots reais no Turso). O
-que está pronto vs. pendente:
+reais (`discover` semeou vídeos, `collect` gravou snapshots reais no Turso).
+**Fase 2 também fechada** (CUSUM + bake-off). O que está pronto vs. pendente:
 
 **Pronto e testado:** contratos (Protocols), tipos do domínio, gerador de
 trajetórias sintéticas (`synth`), fakes de teste, coletor de snapshots, harness de
-replay, métrica de lead time, `BaselineDetector` (aceleração), `CusumDetector`
-(Page-Hinkley, Fase 2), janela anti-vazamento, storage SQL atrás do contrato
-(`SqlTrajectoryRepository`, com **Turso como banco atual em produção** e SQLite
-local como fallback/dev), política de cadência (`policy`), composition root, CLI
-(Typer), settings, adaptador real da YouTube API (filtrado por `videoDuration=
-short`), e os três workflows do GitHub Actions (`ci`, `collect` em cron, `discover`
-de disparo manual — este último existe porque `libsql-experimental` não tem wheel
-para Windows, então nada que precise de `[prod]` roda na máquina de trabalho).
+replay, métricas de lead time (`metrics.py`) e bake-off (`benchmark.py`),
+`BaselineDetector` (aceleração), `CusumDetector` (Page-Hinkley, Fase 2), janela
+anti-vazamento, storage SQL atrás do contrato (`SqlTrajectoryRepository`, com
+**Turso como banco atual em produção** e SQLite local como fallback/dev), política
+de cadência (`policy`), composition root, CLI (Typer), settings, adaptador real da
+YouTube API (filtrado por `videoDuration=short`), e os três workflows do GitHub
+Actions (`ci`, `collect` em cron, `discover` de disparo manual — este último existe
+porque `libsql-experimental` não tem wheel para Windows, então nada que precise de
+`[prod]` roda na máquina de trabalho).
 
 **Pendente (test-first, marcado `xfail`):** `KleinbergBurstDetector` (Fase 3),
-BOCPD/PELT, `benchmark.py` (lead time/precisão/recall), o Motor B inteiro (label,
-features, model, explain, multimodal) e o dashboard.
+BOCPD/PELT, curva earliness×acurácia (evolução do `benchmark.py`), o Motor B
+inteiro (label, features, model, explain, multimodal) e o dashboard.
 
 ---
 
@@ -329,8 +330,10 @@ necessário para falar com o banco; os testes continuam offline via SQLite).
   (`get_trajectory` monta a curva de qualquer vídeo com ≥1 snapshot) — falta só
   tempo de cron acumulando múltiplos snapshots por vídeo, não código.
 - **Fase 2 — Detecção online + métricas (Motor A).** ✅ `CusumDetector`
-  (Page-Hinkley, xfail removido). ⬜ `benchmark.py` (lead time, precisão/recall,
-  earliness×acurácia).
+  (Page-Hinkley, xfail removido). ✅ `benchmark.py` (bake-off: precisão/recall de
+  alarme sobre `takeoff_hours`, earliness via `lead_time_hours`, mesma bateria
+  p/ todos os detectores). ⬜ curva earliness×acurácia (variar sensibilidade de
+  cada detector e plotar o trade-off) fica para quando o dashboard existir.
 - **Fase 3 — Algoritmos avançados (Motor A).** ⬜ Kleinberg; BOCPD; PELT offline.
 - **Fase 4 — Elementos: metadados (Motor B).** ⬜ `label.py` (definição de viral +
   amostragem sem viés) · `features.py` · `model.py` · `explain.py` (SHAP).
