@@ -87,7 +87,15 @@ class SqlTrajectoryRepository:
         times = [datetime.fromisoformat(r[0]) for r in rows]
         t0 = times[0]
         t = np.array([(ts - t0).total_seconds() / 3600.0 for ts in times], dtype=float)
-        views = np.array([int(r[1]) for r in rows], dtype=np.int64)
+        views_raw = np.array([int(r[1]) for r in rows], dtype=np.int64)
+        # A contagem de views do YouTube pode CAIR entre snapshots (a API
+        # remove views fraudulentas/de bot periodicamente) — não é erro
+        # nosso. `Trajectory` exige monótona não-decrescente (é o contrato
+        # que o Motor A espera); tomamos o máximo corrido: a "audiência de
+        # pico já alcançada" é uma leitura honesta de "views" que nunca cai,
+        # sem alterar o snapshot bruto guardado (esse continua intocado —
+        # Princípio 1 do CLAUDE.md).
+        views = np.maximum.accumulate(views_raw)
         return Trajectory(video_id, t, views, self._load_metadata(video_id))
 
     def get_snapshots(self, video_id: str) -> list[Snapshot]:

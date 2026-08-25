@@ -62,6 +62,21 @@ def test_roundtrip_ordena_por_tempo(any_repo):
     assert np.array_equal(traj.views, np.array([100, 200, 300]))
 
 
+def test_get_trajectory_absorve_queda_real_de_views(any_repo):
+    # A API do YouTube às vezes CORRIGE a contagem pra baixo (remoção de
+    # views fraudulentas/bot) — não é bug nosso, é a fonte de dados. O
+    # snapshot bruto (300 em t=1) fica intocado; get_trajectory() precisa
+    # devolver uma Trajectory válida (monótona) mesmo assim, sem levantar.
+    any_repo.save_snapshot(_snap("v", 0, 100))
+    any_repo.save_snapshot(_snap("v", 1, 300))
+    any_repo.save_snapshot(_snap("v", 2, 250))  # caiu — a API corrigiu
+    any_repo.save_snapshot(_snap("v", 3, 400))
+    traj = any_repo.get_trajectory("v")
+    assert np.array_equal(traj.views, np.array([100, 300, 300, 400]))
+    snaps = any_repo.get_snapshots("v")
+    assert [s.views for s in snaps] == [100, 300, 250, 400]  # snapshot bruto INTOCADO
+
+
 def test_snapshot_idempotente_por_instante(any_repo):
     any_repo.save_snapshot(_snap("v", 0, 100))
     any_repo.save_snapshot(_snap("v", 0, 999))

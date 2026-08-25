@@ -60,6 +60,12 @@ class Trajectory:
     `t_hours` são horas desde a publicação (float, ordenado). `views` são
     contagens cumulativas (inteiras, monótonas não-decrescentes). Essa é a
     entrada canônica do Motor A.
+
+    A API do YouTube pode devolver uma contagem MENOR que a anterior (remoção
+    de views fraudulentas/de bot) — o snapshot bruto guarda isso fielmente
+    (Princípio 1, núcleo append-only), mas quem constrói uma `Trajectory` a
+    partir de snapshots (`get_trajectory()`) precisa suavizar pro máximo
+    corrido ANTES de chegar aqui — este construtor não aceita queda.
     """
 
     video_id: str

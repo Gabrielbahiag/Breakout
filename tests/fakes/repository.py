@@ -37,7 +37,12 @@ class InMemoryTrajectoryRepository:
         snaps = [by_time[k] for k in sorted(by_time)]
         t0 = snaps[0].at
         t = np.array([(s.at - t0).total_seconds() / 3600.0 for s in snaps], dtype=float)
-        views = np.array([s.views for s in snaps], dtype=np.int64)
+        views_raw = np.array([s.views for s in snaps], dtype=np.int64)
+        # Mesma defesa do SqlTrajectoryRepository: views do YouTube podem
+        # cair entre snapshots (remoção de views fraudulentas), então
+        # tomamos o máximo corrido pra honrar o contrato de Trajectory sem
+        # alterar o snapshot bruto guardado.
+        views = np.maximum.accumulate(views_raw)
         return Trajectory(video_id, t, views, self._meta.get(video_id))
 
     def get_snapshots(self, video_id: str) -> list[Snapshot]:
