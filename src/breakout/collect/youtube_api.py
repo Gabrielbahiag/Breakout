@@ -122,6 +122,10 @@ class YouTubeApiClient:
             for item in resp.get("items", []):
                 sn = item.get("snippet", {})
                 cd = item.get("contentDetails", {})
+                thumbs = sn.get("thumbnails", {}) or {}
+                # "high" é o melhor equilíbrio qualidade/tamanho pra extração de
+                # features (Fase 5); nem todo vídeo tem maxres/standard.
+                thumb = thumbs.get("high") or thumbs.get("medium") or thumbs.get("default") or {}
                 out.append(
                     VideoMetadata(
                         video_id=item["id"],
@@ -133,6 +137,7 @@ class YouTubeApiClient:
                         ),
                         tags=tuple(sn.get("tags", []) or ()),
                         category=sn.get("categoryId", "unknown"),
+                        thumbnail_url=thumb.get("url", ""),
                     )
                 )
         return out

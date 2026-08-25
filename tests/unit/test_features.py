@@ -10,7 +10,9 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+import httpx
 import pytest
+import respx
 
 from breakout.engine_b.features import extract_features, extract_features_batch
 from breakout.types import Snapshot, VideoMetadata
@@ -75,6 +77,32 @@ def test_adicionar_snapshots_futuros_nao_muda_as_features():
     so_passado = extract_features(_meta(), passado, cutoff_hours=2.0)
     com_futuro = extract_features(_meta(), passado + futuro, cutoff_hours=2.0)
     assert so_passado == com_futuro
+
+
+def test_multimodal_desligado_por_padrao_nao_toca_rede():
+    # Sem respx.mock ativo: se o código tentasse baixar a thumbnail, a
+    # chamada HTTP real quebraria/travaria o teste. with_multimodal=False
+    # (padrão) nem tenta.
+    feats = extract_features(_meta(thumbnail_url="https://i.ytimg.com/vi/x/hq.jpg"), [], cutoff_hours=1.0)
+    assert "thumb_brightness" not in feats
+    assert "transcript_available" not in feats
+
+
+@respx.mock
+def test_multimodal_ligado_soma_features_de_thumbnail_e_transcricao():
+    respx.get("https://i.ytimg.com/vi/x/hq.jpg").mock(return_value=httpx.Response(404))
+    feats = extract_features(
+        _meta(thumbnail_url="https://i.ytimg.com/vi/x/hq.jpg", transcript="Oi, tudo bem?"),
+        [],
+        cutoff_hours=1.0,
+        with_multimodal=True,
+    )
+    # thumbnail falhou (404) -> sem essas chaves, mas não quebra o resto.
+    assert "thumb_brightness" not in feats
+    assert feats["transcript_available"] == 1.0
+    assert feats["transcript_has_question"] == 1.0
+    # as features estáticas/dinâmicas de sempre continuam presentes.
+    assert feats["title_length"] > 0
 
 
 def test_extract_features_batch_uma_linha_por_video():

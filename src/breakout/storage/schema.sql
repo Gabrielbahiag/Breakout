@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS videos (
     channel_subscribers INTEGER DEFAULT 0,
     tags                TEXT    DEFAULT '',  -- vírgula-separado
     category            TEXT    DEFAULT 'unknown',
+    thumbnail_url       TEXT,               -- Motor B multimodal (Fase 5): CV
+    transcript          TEXT,               -- Motor B multimodal (Fase 5): legendas
     first_seen_at       TEXT,               -- quando entrou na carteira
     last_sampled_at     TEXT,               -- p/ a política de cadência
     active              INTEGER DEFAULT 1   -- 1 = ainda rastreando

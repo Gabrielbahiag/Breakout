@@ -30,8 +30,17 @@ def initdb() -> None:
 
 @app.command()
 def discover(query: str = typer.Option(..., help="termo de busca"), max_results: int = 50) -> None:
-    """Descobre vídeos recentes e os semeia na carteira (gasta cota de search)."""
+    """Descobre vídeos recentes e os semeia na carteira (gasta cota de search).
+
+    Thumbnail vem de graça no `fetch_metadata` (Data API oficial). Legenda
+    (Fase 5, Motor B multimodal) é buscada à parte via
+    `collect/transcript_api.py` — mecanismo separado, não gasta cota da
+    Data API, best-effort (vídeo sem legenda vira string vazia, não quebra).
+    """
+    import dataclasses
     from datetime import timedelta
+
+    from .collect.transcript_api import fetch_transcript_text
 
     c = composition.build()
     c.repo.init_schema()
@@ -39,6 +48,8 @@ def discover(query: str = typer.Option(..., help="termo de busca"), max_results:
     since = c.clock.now() - timedelta(hours=6)
     ids = yt.search_recent(query, published_after=since, max_results=max_results)
     for meta in yt.fetch_metadata(ids):
+        transcript = fetch_transcript_text(meta.video_id) or ""
+        meta = dataclasses.replace(meta, transcript=transcript)
         c.repo.save_metadata(meta)
         c.connection.execute(
             "UPDATE videos SET first_seen_at = COALESCE(first_seen_at, ?), active = 1 "

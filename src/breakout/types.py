@@ -51,6 +51,8 @@ class VideoMetadata:
     channel_subscribers: int = 0
     tags: tuple[str, ...] = ()
     category: str = "unknown"
+    thumbnail_url: str = ""    # Motor B multimodal (Fase 5): CV
+    transcript: str = ""       # Motor B multimodal (Fase 5): legendas
 
 
 @dataclass(slots=True)

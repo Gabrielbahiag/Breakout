@@ -11,6 +11,8 @@ dependencies = [
     "ruptures>=1.1",
     "scikit-learn>=1.4",
     "shap>=0.45",
+    "opencv-python>=4.9",
+    "httpx>=0.27",
 ]
 
 [project.optional-dependencies]
@@ -27,6 +29,10 @@ dev = [
 prod = [
     "google-api-python-client>=2.120",
     "libsql-experimental>=0.0.40",
+    # Legenda do YouTube (Fase 5, discover) — mecanismo à parte da Data API
+    # oficial, não gasta cota. Só usado por `discover`, nunca testado direto
+    # (mesmo motivo de google-api-python-client ficar aqui, não em core).
+    "youtube-transcript-api>=1.0",
 ]
 # Dashboard (Fase 6, Streamlit Community Cloud). Altair vem embutido no
 # streamlit, não precisa listar. Combina com [prod] no deploy (o dashboard

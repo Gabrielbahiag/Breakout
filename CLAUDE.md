@@ -57,14 +57,23 @@ anti-vazamento (`window_before`/`snapshots_before`), storage SQL atrás do
 contrato (`SqlTrajectoryRepository` — inclui `get_snapshots()` pro Motor B —
 com **Turso como banco atual em produção** e SQLite local como fallback/dev),
 política de cadência (`policy`), composition root, CLI (Typer), settings,
-adaptador real da YouTube API (filtrado por `videoDuration=short`), e os três
-workflows do GitHub Actions (`ci`, `collect` em cron, `discover` de disparo
-manual — este último existe porque `libsql-experimental` não tem wheel para
-Windows, então nada que precise de `[prod]` roda na máquina de trabalho).
+adaptador real da YouTube API (filtrado por `videoDuration=short`, thumbnail
+incluída de graça no `fetch_metadata`), e os três workflows do GitHub Actions
+(`ci`, `collect` em cron, `discover` de disparo manual — este último existe
+porque `libsql-experimental` não tem wheel para Windows, então nada que
+precise de `[prod]` roda na máquina de trabalho). Motor B multimodal (Fase 5)
+— `thumbnail.py` (CV: brilho/saturação/colorfulness/densidade de bordas via
+OpenCV, contagem de rosto descartada porque o `opencv-python` 5.x removeu o
+`CascadeClassifier`) e `transcript.py` (heurísticas de texto sobre a legenda
+do YouTube, buscada em `collect/transcript_api.py` — decisão explícita de usar
+legenda em vez de Whisper, evita baixar áudio/vídeo e rodar modelo pesado).
+Ambas OPCIONAIS via `features.py`'s `with_multimodal=False` por padrão
+(thumbnail baixa imagem pela rede a cada chamada; ligar por padrão tornaria
+`extract_features` lenta/dependente de rede sem o caller pedir).
 
-**Pendente:** Motor B multimodal (Fase 5 — thumbnail via CV, transcrição via
-NLP), treinar/explicar o modelo sobre dados REAIS (falta acumular outcomes), e
-o deploy do dashboard no Streamlit Community Cloud (o código já está pronto).
+**Pendente:** treinar/explicar o modelo sobre dados REAIS (falta acumular
+outcomes, agora incluindo as features multimodais), e o deploy do dashboard no
+Streamlit Community Cloud (o código já está pronto).
 
 ---
 
@@ -212,8 +221,10 @@ earliness × acurácia e precisão/recall dos alarmes (Fase 2, `benchmark.py`).
 
 **Motor B — análise dos elementos.** Features: metadados (título, duração, tags,
 horário, tamanho do canal), engajamento inicial (velocidade de likes/comentários),
-e multimodal como evolução (thumbnail via CV, transcrição via NLP). Modelo
-classifica viral vs não-viral e explica com SHAP. **Definição de "viral" (rótulo)**
+e multimodal (Fase 5, opcional via `with_multimodal=True`) — thumbnail via CV
+(`thumbnail.py`) e legenda do YouTube (`transcript.py`, não Whisper — ver Seção
+12). Modelo classifica viral vs não-viral e explica com SHAP. **Definição de
+"viral" (rótulo)**
 é plugável (limiar de views ou top percentil por categoria/janela). **Cuidado com
 viés de seleção:** amostrar vídeos cedo (perto do upload) e variados, senão o
 rótulo engana o modelo.
@@ -267,7 +278,8 @@ breakout/
 │   ├── collect/
 │   │   ├── snapshots.py     # SnapshotCollector (usa Clock+Client+Repo injetados)
 │   │   ├── policy.py        # cadência adaptativa sem estado (select_due/retire_stale)
-│   │   └── youtube_api.py   # adaptador real (403 quota vs 429 rate limit)
+│   │   ├── youtube_api.py   # adaptador real (403 quota vs 429 rate limit)
+│   │   └── transcript_api.py# ✅ Fase 5: legenda via youtube-transcript-api (não é a Data API)
 │   ├── storage/
 │   │   ├── schema.sql       # verdade (videos, snapshots) vs derivado (detections, labels)
 │   │   ├── sql_repository.py# SqlTrajectoryRepository (sqlite local OU Turso)
@@ -284,7 +296,9 @@ breakout/
 │   │   ├── label.py         # ✅ label_by_threshold / label_by_percentile (viés de seleção)
 │   │   ├── features.py      # ✅ extract_features: estáticas (upload) + dinâmicas (via snapshots_before)
 │   │   ├── model.py         # ✅ RandomForestClassifier (train/evaluate, métricas honestas)
-│   │   └── explain.py       # ✅ SHAP (TreeExplainer): feature_importance, shap_values
+│   │   ├── explain.py       # ✅ SHAP (TreeExplainer): feature_importance, shap_values
+│   │   ├── thumbnail.py     # ✅ Fase 5: features de CV (brilho/saturação/colorfulness/bordas)
+│   │   └── transcript.py    # ✅ Fase 5: features de texto sobre a legenda
 │   ├── synth/
 │   │   └── trajectories.py  # gerador sintético com verdade-conhecida (5 arquétipos)
 │   └── dashboard.py     # ✅ Streamlit: modo "dados reais" (Turso) + "demo sintético"
@@ -360,23 +374,25 @@ o dashboard puxa UMA trajetória por vez, nunca o banco inteiro na memória.
 ## 11. Stack
 
 **Núcleo:** `python` · `numpy` · `pandas` · `typer` · `pydantic-settings` ·
-`ruptures` (PELT, Motor A) · `scikit-learn` (`model.py`) · `shap` (`explain.py`).
+`ruptures` (PELT, Motor A) · `scikit-learn` (`model.py`) · `shap` (`explain.py`) ·
+`opencv-python` (`thumbnail.py`, Fase 5) · `httpx` (download da thumbnail).
 `scipy` é dependência direta (Student-t/logsumexp do BOCPD), embora só apareça
 explícita transitivamente via `ruptures`.
 **Testes (`[dev]`):** `pytest` · `pytest-cov` · `hypothesis` · `time-machine` ·
 `respx` · `syrupy`.
 **Produção (`[prod]`):** `google-api-python-client` · `libsql-experimental` (Turso).
 **NÃO instala no Windows sem admin** (`libsql-experimental` não tem wheel pra
-Windows nem builda sem toolchain Rust+MSVC). Na máquina de trabalho, instale só
-`.[dev]`; tudo que precisa de `[prod]` roda via GitHub Actions
-(`collect`/`discover`), nunca localmente.
+Windows nem builda sem toolchain Rust+MSVC). `youtube-transcript-api` (Fase 5,
+legenda) mora aqui também — só usado por `discover`, nunca testado direto (mesmo
+motivo de `google-api-python-client` ficar em `[prod]`, não em core). Na máquina
+de trabalho, instale só `.[dev]`; tudo que precisa de `[prod]` roda via GitHub
+Actions (`collect`/`discover`), nunca localmente.
 **Dashboard (`[dashboard]`):** `streamlit` (Altair vem embutido — não precisa
 listar). `dashboard.py` roda local contra SQLite (testável na máquina de
 trabalho, sem `[prod]`) e em produção contra o Turso (Streamlit Cloud, Linux,
 onde `[prod]` instala normal — precisa de `.[prod,dashboard]` no deploy).
 **Motores (`[engines]`, fases seguintes):** `river` (online, ainda não usado
-por nada) · `matplotlib`/`plotly`. Multimodal (evolução): `opencv`/`Pillow`
-(thumbnail), `whisper` (transcrição).
+por nada) · `matplotlib`/`plotly`.
 **Dev sem admin:** `venv` ou `uv`; Docker está fora (e não é necessário).
 
 ---
@@ -409,7 +425,16 @@ por nada) · `matplotlib`/`plotly`. Multimodal (evolução): `opencv`/`Pillow`
   Validado test-first com dataset sintético de sinal PLANTADO (mesmo truque
   do Motor A) — falta treinar/explicar sobre dados REAIS quando a coleta
   acumular outcomes suficientes.
-- **Fase 5 — Elementos: multimodal (Motor B).** ⬜ thumbnail (CV) + transcrição.
+- **Fase 5 — Elementos: multimodal (Motor B).** ✅ Fechada. `thumbnail.py`
+  (features de CV: brilho, saturação, colorfulness, densidade de bordas —
+  sem contagem de rosto, o `opencv-python` 5.x removeu o `CascadeClassifier`
+  clássico e o substituto exige baixar um modelo ONNX à parte, o que
+  contradiz a decisão abaixo). `transcript.py` + `collect/transcript_api.py`
+  (`youtube-transcript-api`): decisão consciente de usar LEGENDA do YouTube
+  em vez de Whisper — Whisper exigiria baixar áudio/vídeo (yt-dlp/ffmpeg) e
+  rodar um modelo pesado (torch), lento e frágil demais pro GitHub Actions
+  free tier; legenda é best-effort, sem mídia, sem gastar cota da Data API.
+  Ambas opcionais em `features.py` (`with_multimodal=False` por padrão).
 - **Fase 6 — Unificação + dashboard.** ✅ `dashboard.py` (Streamlit): curva com
   ponto de decolagem marcado, KPIs de lead time, e a seção do Motor B (SHAP
   sobre demo sintético enquanto dado real não acumula outcomes; features reais

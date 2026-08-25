@@ -35,11 +35,26 @@ class SqlTrajectoryRepository:
         return [s.strip() for s in body.split(";") if s.strip()]
 
     def init_schema(self) -> None:
-        """Aplica o schema.sql (idempotente — tudo é CREATE TABLE IF NOT EXISTS)."""
+        """Aplica o schema.sql (idempotente — tudo é CREATE TABLE IF NOT EXISTS)
+        e migra colunas novas em bancos que já existiam antes delas (o Turso de
+        produção já tinha `videos` sem `thumbnail_url`/`transcript` quando a
+        Fase 5 chegou — `CREATE TABLE IF NOT EXISTS` sozinho não alcança isso,
+        só cria tabela nova do zero)."""
         sql = resources.files("breakout.storage").joinpath("schema.sql").read_text(encoding="utf-8")
         for stmt in self._statements(sql):
             self._conn.execute(stmt)
+        self._migrate_add_columns()
         self._conn.commit()
+
+    def _migrate_add_columns(self) -> None:
+        """ALTER TABLE ADD COLUMN pra colunas que schema.sql passou a
+        declarar depois da tabela já existir. Idempotente: só adiciona o que
+        `PRAGMA table_info` mostra que falta — `ADD COLUMN` sem essa checagem
+        levantaria erro numa coluna que já existe."""
+        existing = {row[1] for row in self._conn.execute("PRAGMA table_info(videos)").fetchall()}
+        for column in ("thumbnail_url", "transcript"):
+            if column not in existing:
+                self._conn.execute(f"ALTER TABLE videos ADD COLUMN {column} TEXT")
 
     # ---- escrita (contrato) ---------------------------------------------
     def save_snapshot(self, snapshot: Snapshot) -> None:
@@ -60,8 +75,8 @@ class SqlTrajectoryRepository:
         self._conn.execute(
             "INSERT OR REPLACE INTO videos "
             "(video_id, channel_id, title, duration_s, published_at, "
-            " channel_subscribers, tags, category) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            " channel_subscribers, tags, category, thumbnail_url, transcript) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 metadata.video_id,
                 metadata.channel_id,
@@ -71,6 +86,8 @@ class SqlTrajectoryRepository:
                 int(metadata.channel_subscribers),
                 ",".join(metadata.tags),
                 metadata.category,
+                metadata.thumbnail_url,
+                metadata.transcript,
             ),
         )
         self._conn.commit()
@@ -122,7 +139,7 @@ class SqlTrajectoryRepository:
     def list_metadata(self) -> list[VideoMetadata]:
         rows = self._conn.execute(
             "SELECT video_id, channel_id, title, duration_s, published_at, "
-            "       channel_subscribers, tags, category FROM videos"
+            "       channel_subscribers, tags, category, thumbnail_url, transcript FROM videos"
         ).fetchall()
         return [self._row_to_metadata(r) for r in rows]
 
@@ -134,7 +151,7 @@ class SqlTrajectoryRepository:
     def _load_metadata(self, video_id: str) -> VideoMetadata | None:
         row = self._conn.execute(
             "SELECT video_id, channel_id, title, duration_s, published_at, "
-            "       channel_subscribers, tags, category "
+            "       channel_subscribers, tags, category, thumbnail_url, transcript "
             "FROM videos WHERE video_id = ?",
             (video_id,),
         ).fetchone()
@@ -153,4 +170,6 @@ class SqlTrajectoryRepository:
             channel_subscribers=int(row[5] or 0),
             tags=tuple(t for t in (row[6] or "").split(",") if t),
             category=row[7] or "unknown",
+            thumbnail_url=row[8] or "",
+            transcript=row[9] or "",
         )
