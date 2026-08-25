@@ -115,6 +115,10 @@ class SqlTrajectoryRepository:
             for r in rows
         ]
 
+    def video_peak_views(self) -> dict[str, int]:
+        rows = self._conn.execute("SELECT video_id, MAX(views) FROM snapshots GROUP BY video_id").fetchall()
+        return {r[0]: int(r[1]) for r in rows}
+
     def list_metadata(self) -> list[VideoMetadata]:
         rows = self._conn.execute(
             "SELECT video_id, channel_id, title, duration_s, published_at, "

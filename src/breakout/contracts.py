@@ -78,6 +78,13 @@ class TrajectoryRepository(Protocol):
         que `save_snapshot` já paga por chamada)."""
         ...
 
+    def video_peak_views(self) -> dict[str, int]:
+        """video_id -> maior contagem de views já registrada, numa query
+        agregada só. Usado pelo dashboard pra destacar/filtrar vídeos virais
+        sem carregar a trajetória inteira de cada um (mesmo motivo de
+        `list_metadata`)."""
+        ...
+
     def video_ids(self) -> list[str]: ...
 
 

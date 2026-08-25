@@ -52,5 +52,8 @@ class InMemoryTrajectoryRepository:
     def list_metadata(self) -> list[VideoMetadata]:
         return list(self._meta.values())
 
+    def video_peak_views(self) -> dict[str, int]:
+        return {vid: max(s.views for s in by_time.values()) for vid, by_time in self._snaps.items() if by_time}
+
     def video_ids(self) -> list[str]:
         return list(self._snaps)

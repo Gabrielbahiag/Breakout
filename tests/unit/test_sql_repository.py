@@ -119,3 +119,15 @@ def test_list_metadata_devolve_todos_os_metadados_salvos(any_repo):
 
 def test_list_metadata_vazio_quando_nao_ha_metadados(any_repo):
     assert any_repo.list_metadata() == []
+
+
+def test_video_peak_views_devolve_o_maximo_por_video(any_repo):
+    any_repo.save_snapshot(_snap("a", 0, 100))
+    any_repo.save_snapshot(_snap("a", 1, 300))
+    any_repo.save_snapshot(_snap("a", 2, 250))  # queda real (correção da API)
+    any_repo.save_snapshot(_snap("b", 0, 999_999))
+    assert any_repo.video_peak_views() == {"a": 300, "b": 999_999}
+
+
+def test_video_peak_views_vazio_quando_nao_ha_snapshots(any_repo):
+    assert any_repo.video_peak_views() == {}

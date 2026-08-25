@@ -95,6 +95,17 @@ def _real_video_titles() -> dict[str, str]:
         return {}
 
 
+@st.cache_data(ttl="10m")
+def _real_video_peak_views() -> dict[str, int]:
+    """video_id -> pico de views já registrado, numa query agregada só —
+    usado pra destacar/filtrar vídeos virais sem carregar a trajetória
+    inteira de cada um (mesmo motivo de _real_video_titles)."""
+    try:
+        return _repo().video_peak_views()
+    except Exception:
+        return {}
+
+
 @st.cache_data
 def _synthetic_trajectory(archetype: str, seed: int):
     return make_trajectory(Archetype(archetype), seed=seed)
@@ -143,6 +154,14 @@ with st.sidebar:
         "Modo", ["Demo sintético", "Dados reais"], label_visibility="collapsed"
     )
 
+    threshold = st.number_input(
+        "Limiar de viral (views)",
+        min_value=1_000,
+        value=VIRAL_THRESHOLD_DEFAULT,
+        step=10_000,
+        help="Usado pra marcar 'cruzou o limiar', destacar vídeos virais na lista, e calcular lead time.",
+    )
+
     if mode == "Demo sintético":
         archetype_name = st.selectbox("Arquétipo", [a.value for a in Archetype])
         seed = st.number_input("Seed", min_value=0, value=1, step=1)
@@ -158,17 +177,32 @@ with st.sidebar:
                 "Seção 3 do CLAUDE.md)."
             )
             st.stop()
+
         titles = _real_video_titles()
-        video_id = st.selectbox("Vídeo", ids, format_func=lambda vid: titles.get(vid, vid))
+        peaks = _real_video_peak_views()
+        is_viral = {vid: peaks.get(vid, 0) >= threshold for vid in ids}
+        n_viral = sum(is_viral.values())
+        st.caption(f"🔥 {n_viral} de {len(ids)} vídeos já cruzaram o limiar de viral.")
+
+        only_viral = st.checkbox("Mostrar só vídeos que já viralizaram")
+        display_ids = [v for v in ids if is_viral[v]] if only_viral else ids
+        if not display_ids:
+            st.info("Nenhum vídeo cruzou esse limiar ainda — ajuste o limiar ou desmarque o filtro.")
+            st.stop()
+        # virais primeiro (mesmo mostrando todos), depois ordem alfabética.
+        display_ids = sorted(display_ids, key=lambda v: (not is_viral[v], titles.get(v, v)))
+
+        def _video_label(vid: str) -> str:
+            title = titles.get(vid, vid)
+            return f"🔥 {title}" if is_viral[vid] else title
+
+        video_id = st.selectbox("Vídeo", display_ids, format_func=_video_label)
         traj = _load_real_trajectory(video_id)
 
     st.divider()
     st.subheader("Motor A")
     detector_label = st.selectbox("Detector", list(DETECTORS.keys()), index=1)
     st.caption(DETECTOR_DESCRIPTIONS[detector_label])
-    threshold = st.number_input(
-        "Limiar de viral (views)", min_value=1_000, value=VIRAL_THRESHOLD_DEFAULT, step=10_000
-    )
 
 with st.expander("Por que existem 4 detectores, e o que o resultado significa?"):
     bullets = "\n".join(f"- **{k}:** {v}" for k, v in DETECTOR_DESCRIPTIONS.items())
