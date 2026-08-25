@@ -32,7 +32,13 @@ def make_connection(settings: Settings):
     import sqlite3
 
     Path(settings.local_db_path).parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(settings.local_db_path)
+    # check_same_thread=False: o dashboard guarda esta conexão num
+    # st.cache_resource (um objeto só, reusado entre reruns) — o Streamlit
+    # executa reruns em threads variadas, e o sqlite3 por padrão proíbe usar
+    # a mesma conexão fora da thread que a criou. Seguro aqui porque o
+    # dashboard é read-only (nunca escreve) e cada rerun é sequencial, não
+    # concorrente de verdade.
+    conn = sqlite3.connect(settings.local_db_path, check_same_thread=False)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
