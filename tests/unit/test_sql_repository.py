@@ -15,7 +15,7 @@ import pytest
 
 from breakout.contracts import TrajectoryRepository
 from breakout.storage.sql_repository import SqlTrajectoryRepository
-from breakout.types import Snapshot
+from breakout.types import Snapshot, VideoMetadata
 from tests.fakes.repository import InMemoryTrajectoryRepository
 
 pytestmark = pytest.mark.unit
@@ -41,6 +41,12 @@ def any_repo(request):
 
 def _snap(vid, hours, views, likes=0, comments=0):
     return Snapshot(video_id=vid, at=T0 + timedelta(hours=hours), views=views, likes=likes, comments=comments)
+
+
+def _meta(vid, title):
+    return VideoMetadata(
+        video_id=vid, channel_id="c", title=title, duration_s=30, published_at=T0,
+    )
 
 
 def test_honra_o_contrato(any_repo):
@@ -87,3 +93,14 @@ def test_get_snapshots_ordena_e_preserva_likes_comments(any_repo):
 
 def test_get_snapshots_inexistente_devolve_lista_vazia(any_repo):
     assert any_repo.get_snapshots("nao_existe") == []
+
+
+def test_list_metadata_devolve_todos_os_metadados_salvos(any_repo):
+    any_repo.save_metadata(_meta("a", "Título A"))
+    any_repo.save_metadata(_meta("b", "Título B"))
+    titles = {m.video_id: m.title for m in any_repo.list_metadata()}
+    assert titles == {"a": "Título A", "b": "Título B"}
+
+
+def test_list_metadata_vazio_quando_nao_ha_metadados(any_repo):
+    assert any_repo.list_metadata() == []

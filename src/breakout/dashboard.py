@@ -44,6 +44,30 @@ DETECTORS = {
     "bocpd (mudança de regime)": BocpdDetector,
 }
 
+DETECTOR_DESCRIPTIONS = {
+    "baseline (aceleração)": (
+        "Olha a velocidade de crescimento das views e dispara quando ela "
+        "está acelerando de forma sustentada por várias horas seguidas — o "
+        "jeito mais simples de perceber uma decolagem."
+    ),
+    "cusum (Page-Hinkley)": (
+        "Técnica estatística clássica: acumula o quanto a taxa de "
+        "crescimento está acima do normal e dispara quando esse acúmulo "
+        "foge demais do esperado."
+    ),
+    "kleinberg (rajada)": (
+        "O algoritmo clássico de detecção de 'rajadas'. Modela o vídeo como "
+        "estando sempre em um de dois estados — normal ou em rajada — e "
+        "decide qual estado explica melhor o que está vendo."
+    ),
+    "bocpd (mudança de regime)": (
+        "Em vez de sim/não, calcula uma PROBABILIDADE de que o vídeo mudou "
+        "de regime. Funciona bem pra quem fica quieto e de repente acorda "
+        "(SLEEPER) — mas não pra quem já decola rápido desde o início "
+        "(ROCKET), porque não tem um 'antes' calmo pra comparar."
+    ),
+}
+
 
 # ---- carregamento de dados -------------------------------------------------
 
@@ -59,6 +83,16 @@ def _real_video_ids() -> list[str]:
         return sorted(_repo().video_ids())
     except Exception:
         return []
+
+
+@st.cache_data(ttl="10m")
+def _real_video_titles() -> dict[str, str]:
+    """video_id -> título, numa query só (list_metadata) — evita N+1
+    round-trips contra o Turso remoto ao popular o seletor do dashboard."""
+    try:
+        return {m.video_id: m.title for m in _repo().list_metadata() if m.title}
+    except Exception:
+        return {}
 
 
 @st.cache_data
@@ -124,14 +158,36 @@ with st.sidebar:
                 "Seção 3 do CLAUDE.md)."
             )
             st.stop()
-        video_id = st.selectbox("Vídeo", ids)
+        titles = _real_video_titles()
+        video_id = st.selectbox("Vídeo", ids, format_func=lambda vid: titles.get(vid, vid))
         traj = _load_real_trajectory(video_id)
 
     st.divider()
     st.subheader("Motor A")
     detector_label = st.selectbox("Detector", list(DETECTORS.keys()), index=1)
+    st.caption(DETECTOR_DESCRIPTIONS[detector_label])
     threshold = st.number_input(
         "Limiar de viral (views)", min_value=1_000, value=VIRAL_THRESHOLD_DEFAULT, step=10_000
+    )
+
+with st.expander("Por que existem 4 detectores, e o que o resultado significa?"):
+    bullets = "\n".join(f"- **{k}:** {v}" for k, v in DETECTOR_DESCRIPTIONS.items())
+    st.markdown(
+        "Os quatro são abordagens matemáticas diferentes pra responder à "
+        "MESMA pergunta: **quando esse vídeo começou a decolar?** Rodar os "
+        "quatro na mesma curva (o \"bake-off\" do Motor A) mostra que eles "
+        "podem discordar — cada um tem pontos fortes e fracos diferentes. "
+        "Escolher um aqui simula rodar só ele em produção.\n\n"
+        f"{bullets}\n\n"
+        "**\"Decolagem detectada em Xh\"** — o detector reprocessa a curva "
+        "PONTO A PONTO, como se os dados estivessem chegando ao vivo (sem "
+        "ver o futuro). Xh é a primeira hora em que ele ficou confiante de "
+        "que o crescimento mudou — não é quando o vídeo viralizou, é quando "
+        "o ALGORITMO percebeu o sinal.\n\n"
+        "**Lead time** — compara com a linha vermelha do gráfico (quando o "
+        "vídeo realmente cruzou o limiar de viral). Detecção ANTES = lead "
+        "time positivo (deu tempo de reagir). Detecção DEPOIS = lead time "
+        "negativo (o algoritmo chegou atrasado pra esse limiar)."
     )
 
 detector = DETECTORS[detector_label]()
@@ -202,7 +258,7 @@ if mode == "Demo sintético":
     with st.container(horizontal=True):
         st.metric("ROC-AUC (teste)", f"{result.roc_auc:.2f}", border=True)
         st.metric("Precisão", f"{result.precision:.2f}", border=True)
-        st.metric("Recall", f"{result.recall:.2f}", border=True)
+        st.metric("Revocação (recall)", f"{result.recall:.2f}", border=True)
 
     with st.container(border=True):
         st.markdown("**Importância das features (SHAP, |valor médio|)**")

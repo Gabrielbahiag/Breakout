@@ -44,5 +44,8 @@ class InMemoryTrajectoryRepository:
         by_time = self._snaps.get(video_id, {})
         return [by_time[k] for k in sorted(by_time)]
 
+    def list_metadata(self) -> list[VideoMetadata]:
+        return list(self._meta.values())
+
     def video_ids(self) -> list[str]:
         return list(self._snaps)

@@ -107,6 +107,13 @@ class SqlTrajectoryRepository:
             for r in rows
         ]
 
+    def list_metadata(self) -> list[VideoMetadata]:
+        rows = self._conn.execute(
+            "SELECT video_id, channel_id, title, duration_s, published_at, "
+            "       channel_subscribers, tags, category FROM videos"
+        ).fetchall()
+        return [self._row_to_metadata(r) for r in rows]
+
     def video_ids(self) -> list[str]:
         rows = self._conn.execute("SELECT DISTINCT video_id FROM snapshots").fetchall()
         return [r[0] for r in rows]
@@ -121,6 +128,10 @@ class SqlTrajectoryRepository:
         ).fetchone()
         if row is None:
             return None
+        return self._row_to_metadata(row)
+
+    @staticmethod
+    def _row_to_metadata(row) -> VideoMetadata:
         return VideoMetadata(
             video_id=row[0],
             channel_id=row[1] or "",

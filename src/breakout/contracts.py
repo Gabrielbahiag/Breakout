@@ -71,6 +71,13 @@ class TrajectoryRepository(Protocol):
         (diferente de `get_trajectory`, que levanta `KeyError`)."""
         ...
 
+    def list_metadata(self) -> list[VideoMetadata]:
+        """Metadados de TODOS os vídeos com metadata salva, numa query só —
+        não toca em `snapshots`. Usado pelo dashboard pra popular o seletor
+        por título sem N+1 round-trips contra o Turso remoto (o mesmo custo
+        que `save_snapshot` já paga por chamada)."""
+        ...
+
     def video_ids(self) -> list[str]: ...
 
 
