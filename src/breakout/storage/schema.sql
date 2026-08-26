@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS videos (
     category            TEXT    DEFAULT 'unknown',
     thumbnail_url       TEXT,               -- Motor B multimodal (Fase 5): CV
     transcript          TEXT,               -- Motor B multimodal (Fase 5): legendas
+    transcript_source   TEXT,               -- Fase 7: 'caption' | 'whisper' | NULL
     first_seen_at       TEXT,               -- quando entrou na carteira
     last_sampled_at     TEXT,               -- p/ a política de cadência
     active              INTEGER DEFAULT 1   -- 1 = ainda rastreando

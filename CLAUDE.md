@@ -30,7 +30,7 @@ teto honesto do problema.
 
 ## 2. Estado atual (o que já existe)
 
-O esqueleto **já está construído e roda verde**: `pytest` → 166 testes passando,
+O esqueleto **já está construído e roda verde**: `pytest` → 172 testes passando,
 **zero `xfail`**. **Fase 0 fechada de verdade**: repo público
 (`Gabrielbahiag/Breakout`), Turso em produção, YouTube API key configurada,
 coletor rodando no cron do GitHub Actions e já validado com dados reais
@@ -43,9 +43,9 @@ Community Cloud** (modo dados reais + modo demo sintético, editor de nichos
 do discover automático, multimodal conectado, disparo de collect/discover
 via GitHub API). Fase 7 (melhorias planejadas em 2026-08-25) já tem
 automação do `discover`, conexão do multimodal + disparo de coleta pelo
-dashboard, e reconhecimento facial (rede YuNet) fechados; só Whisper como
-fallback de transcrição segue em `planning/`. O que está pronto vs.
-pendente:
+dashboard, reconhecimento facial (rede YuNet) e Whisper como fallback de
+transcrição TODOS fechados — nenhum item do planejamento da Fase 7 segue
+pendente. O que está pronto vs. pendente:
 
 **Pronto e testado:** contratos (Protocols), tipos do domínio, gerador de
 trajetórias sintéticas (`synth`), fakes de teste, coletor de snapshots, harness de
@@ -74,8 +74,10 @@ via OpenCV, MAIS contagem de rosto via rede neural leve `cv2.FaceDetectorYN`
 descartado isso por causa da remoção do `CascadeClassifier` clássico no
 `opencv-python` 5.x, revertido ao perceber que o modelo YuNet é leve) e
 `transcript.py` (heurísticas de texto sobre a legenda do YouTube, buscada em
-`collect/transcript_api.py` — decisão explícita de usar legenda em vez de
-Whisper, evita baixar áudio/vídeo e rodar modelo pesado).
+`collect/transcript_api.py` — decisão explícita de usar legenda como
+primeira tentativa, sempre; `collect/whisper_transcribe.py`, Fase 7, é o
+FALLBACK só quando não há legenda nenhuma E `Settings.whisper_fallback_enabled`
+está ligado — import preguiçoso, dependências `[whisper]` fora de `[prod]`).
 Ambas OPCIONAIS via `features.py`'s `with_multimodal=False` por padrão
 (thumbnail baixa imagem pela rede a cada chamada; ligar por padrão tornaria
 `extract_features` lenta/dependente de rede sem o caller pedir).
@@ -294,7 +296,8 @@ breakout/
 │   │   ├── youtube_api.py   # adaptador real (403 quota vs 429 rate limit)
 │   │   ├── transcript_api.py# ✅ Fase 5: legenda via youtube-transcript-api (não é a Data API)
 │   │   ├── topics.py        # ✅ Fase 7: discover_topics (nichos/idioma, editável pelo dashboard)
-│   │   └── dispatch.py      # ✅ Fase 7: dispara workflow_dispatch do GitHub (collect/discover)
+│   │   ├── dispatch.py      # ✅ Fase 7: dispara workflow_dispatch do GitHub (collect/discover)
+│   │   └── whisper_transcribe.py # ✅ Fase 7: fallback Whisper (só quando não há legenda)
 │   ├── storage/
 │   │   ├── schema.sql       # verdade (videos, snapshots) vs derivado (detections, labels)
 │   │   ├── sql_repository.py# SqlTrajectoryRepository (sqlite local OU Turso)
@@ -436,6 +439,11 @@ trabalho, sem `[prod]`) e em produção contra o Turso (Streamlit Cloud, Linux,
 onde `[prod]` instala normal — precisa de `.[prod,dashboard]` no deploy).
 **Motores (`[engines]`, fases seguintes):** `river` (online, ainda não usado
 por nada) · `matplotlib`/`plotly`.
+**Whisper fallback (`[whisper]`, Fase 7):** `faster-whisper` (CTranslate2,
+não `openai-whisper` — evita `torch`) · `yt-dlp` (só áudio, nunca persiste
+mídia). Fora de `[prod]`: só o `discover.yml` instala, e só quando disparado
+com `usar_whisper_fallback=true` — nenhum outro comando/ambiente precisa
+disso.
 **Dev sem admin:** `venv` ou `uv`; Docker está fora (e não é necessário).
 
 ---
@@ -499,12 +507,17 @@ por nada) · `matplotlib`/`plotly`.
     licenciado MIT do próprio repositório `opencv_zoo`) — não dá pra
     sintetizar um rosto via numpy, então ruído aleatório só cobre o caso
     "zero rostos".
-  - ⬜ **Transcrição via Whisper como FALLBACK** (só quando não há legenda)
-    — `planning/transcricao-whisper.md`. `faster-whisper` (não
-    `openai-whisper`, evita dependência de `torch`); pipeline baixa só
-    áudio via `yt-dlp`, nunca persiste mídia. Novo extra `[whisper]`,
-    op-in por execução do `discover.yml` (custo de tempo por vídeo ainda
-    não medido).
+  - ✅ **Transcrição via Whisper como FALLBACK** (2026-08-26, só quando não
+    há legenda) — `planning/transcricao-whisper.md`.
+    `collect/whisper_transcribe.py`: `faster-whisper` (não `openai-whisper`,
+    evita dependência de `torch`); pipeline baixa só áudio via `yt-dlp` pra
+    um dir temporário (apagado ao sair do `with`), nunca persiste mídia.
+    `cli.py::_run_discover` só importa o módulo DENTRO do `if` (fallback
+    desligado = dependências pesadas nem precisam estar instaladas).
+    `VideoMetadata.transcript_source` (`'caption'`|`'whisper'`|`''`) rastreia
+    proveniência. Novo extra `[whisper]` (fora de `[prod]`), op-in por
+    execução do `discover.yml` (input `usar_whisper_fallback`, default
+    `false` — custo de tempo por vídeo ainda não medido em produção).
   - ✅ **Automação do `discover`** (multi-nicho + idioma) — Fechada.
     `planning/discover-automatico.md`. Design mudou durante a execução: em
     vez de arquivo versionado, os nichos ficam numa tabela (`discover_topics`)

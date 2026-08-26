@@ -1,8 +1,8 @@
 # Planejamento — Transcrição via Whisper (fallback)
 
-> Registrado em 2026-08-25. Ainda não implementado. Retomar seguindo
-> test-first (Princípio 4 do CLAUDE.md): escrever os testes da seção
-> "Testes" abaixo ANTES de tocar em código de produção.
+> Registrado em 2026-08-25. **Fechado em 2026-08-26** (test-first: os testes
+> da seção "Testes" abaixo foram escritos e confirmados falhando ANTES do
+> código de produção existir).
 
 ## Contexto e escopo confirmado
 
@@ -107,3 +107,51 @@ no workflow.
   igual `youtube-transcript-api`, é um mecanismo não-oficial e pode quebrar
   entre versões; manter `except Exception` amplo e nunca deixar isso
   derrubar o `discover` inteiro.
+
+## Implementado (2026-08-26)
+
+Exatamente conforme planejado:
+
+- `collect/whisper_transcribe.py`: `transcribe_via_whisper(video_id, *,
+  model_size="tiny") -> str | None`. `yt-dlp` baixa só o áudio pra um
+  `tempfile.TemporaryDirectory` (apagado automaticamente ao sair do `with`),
+  `faster-whisper` (`WhisperModel("tiny", device="cpu", compute_type="int8")`,
+  singleton de módulo) transcreve. `except Exception` largo — nunca levanta.
+  Sem teste de rede direto (mesmo padrão de `transcript_api.py`), já que
+  `[whisper]` não instala neste ambiente (Windows sem admin/`[prod]`).
+- `cli.py::_run_discover`: legenda tentada primeiro; só se vier vazia E
+  `c.settings.whisper_fallback_enabled` for `True` é que
+  `from .collect.whisper_transcribe import transcribe_via_whisper` acontece
+  — import de propósito DENTRO do `if`, então com o fallback desligado
+  (padrão) as dependências pesadas nem precisam estar instaladas.
+  `transcript_source` (`'caption'` | `'whisper'` | `''`) grava a proveniência.
+- `Settings.whisper_fallback_enabled: bool = False` (env
+  `WHISPER_FALLBACK_ENABLED`) — decisão de nomear sem o prefixo `BREAKOUT_`
+  cogitado originalmente no plano, pra ficar consistente com o resto das
+  Settings existentes (`YOUTUBE_API_KEY`, `TURSO_*`, nenhuma tem prefixo).
+- `VideoMetadata.transcript_source` (novo campo) + coluna `transcript_source`
+  em `schema.sql` e `_migrate_add_columns` (mesmo padrão idempotente de
+  `thumbnail_url`/`transcript`).
+- `pyproject.toml`: novo extra `[whisper]` (`faster-whisper`, `yt-dlp`), fora
+  de `[prod]`.
+- `discover.yml`: novo input `usar_whisper_fallback` (boolean, default
+  `false`) — dois steps de instalação mutuamente exclusivos (`if:
+  inputs.usar_whisper_fallback == true` / `!= true`) escolhem `.[prod]` ou
+  `.[prod,whisper]`; `WHISPER_FALLBACK_ENABLED: ${{ inputs.usar_whisper_fallback
+  == true }}` nos dois steps de `discover`/`discover-all` — a comparação
+  `== true` (em vez de repassar o input cru) evita que o `schedule` (cron,
+  sem `inputs` definido) vaze uma string vazia pro parser de bool do
+  pydantic-settings.
+
+**Testes (`tests/unit/test_discover_whisper_fallback.py`, 4 testes):**
+achado de design útil — como `faster-whisper`/`yt-dlp` não estão instalados
+neste ambiente de teste, o teste do caminho "fallback desligado" prova a
+propriedade "não importa o módulo fora da hora" de graça: se o código
+importasse `whisper_transcribe` incondicionalmente, o teste quebraria com
+`ModuleNotFoundError` de verdade, não com um mock falhando. Pro caminho
+"fallback ligado", em vez de instalar as dependências pesadas só pra testar,
+um módulo FALSO é injetado em `sys.modules["breakout.collect.
+whisper_transcribe"]` via `monkeypatch.setitem` antes do `import` lazy
+acontecer — o `from .collect.whisper_transcribe import
+transcribe_via_whisper` dentro de `_run_discover` encontra o módulo já em
+cache e nunca toca o arquivo real (nem `faster_whisper`/`yt_dlp`).

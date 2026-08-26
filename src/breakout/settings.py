@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     github_owner: str = "Gabrielbahiag"
     github_repo: str = "Breakout"
 
+    # --- fallback de transcrição via Whisper (Fase 7) ---
+    # desligado por padrão: legenda do YouTube é sempre a primeira tentativa
+    # (grátis, sem download de mídia); Whisper só roda quando habilitado
+    # explicitamente E não há legenda nenhuma (ver cli.py::_run_discover).
+    whisper_fallback_enabled: bool = False
+
     # --- storage local (dev) ---
     local_db_path: str = "data/breakout.db"
 

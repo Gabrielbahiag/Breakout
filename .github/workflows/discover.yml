@@ -7,6 +7,10 @@ name: discover
 #     sobre os nichos ATIVOS em `discover_topics` — lista editável pelo
 #     dashboard (ou por SQL direto), sem precisar mexer neste workflow pra
 #     trocar de nicho/idioma.
+#   - `usar_whisper_fallback` (Fase 7, planning/transcricao-whisper.md):
+#     op-in por execução — só instala faster-whisper/yt-dlp e liga o
+#     fallback quando marcado. Desligado por padrão (mais rápido, sem
+#     download de áudio) — inclusive no cron diário.
 on:
   workflow_dispatch:
     inputs:
@@ -17,6 +21,11 @@ on:
         description: "máximo de vídeos a semear (só usado com `query`)"
         required: false
         default: "50"
+      usar_whisper_fallback:
+        description: "usar Whisper como fallback de transcrição quando não há legenda (mais lento — baixa áudio e roda um modelo local)"
+        required: false
+        type: boolean
+        default: false
   schedule:
     - cron: "17 3 * * *"   # diário, fora do pico (mesma lógica do :23 do collect)
 
@@ -29,13 +38,18 @@ jobs:
         with:
           python-version: "3.12"
       - name: Instalar dependências de produção
+        if: inputs.usar_whisper_fallback != true
         run: pip install -e ".[prod]"
+      - name: Instalar dependências de produção + Whisper fallback
+        if: inputs.usar_whisper_fallback == true
+        run: pip install -e ".[prod,whisper]"
       - name: Descobrir um termo avulso
         if: github.event_name == 'workflow_dispatch' && inputs.query != ''
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          WHISPER_FALLBACK_ENABLED: ${{ inputs.usar_whisper_fallback == true }}
         run: python -m breakout discover --query "${{ inputs.query }}" --max-results ${{ inputs.max_results }}
       - name: Descobrir todos os nichos ativos (discover_topics)
         if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.query == '')
@@ -43,4 +57,5 @@ jobs:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          WHISPER_FALLBACK_ENABLED: ${{ inputs.usar_whisper_fallback == true }}
         run: python -m breakout discover-all

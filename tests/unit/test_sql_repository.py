@@ -135,9 +135,9 @@ def test_video_peak_views_vazio_quando_nao_ha_snapshots(any_repo):
 
 def test_init_schema_migra_colunas_novas_em_banco_ja_existente():
     # Simula o Turso de produção: a tabela `videos` já existia ANTES de
-    # thumbnail_url/transcript entrarem no schema.sql (Fase 5). init_schema()
-    # precisa adicionar as colunas que faltam sem levantar, e sem apagar dado
-    # já gravado.
+    # thumbnail_url/transcript/transcript_source entrarem no schema.sql
+    # (Fase 5 e Fase 7). init_schema() precisa adicionar as colunas que
+    # faltam sem levantar, e sem apagar dado já gravado.
     conn = sqlite3.connect(":memory:")
     conn.execute(
         "CREATE TABLE videos (video_id TEXT PRIMARY KEY, channel_id TEXT, title TEXT, "
@@ -154,8 +154,23 @@ def test_init_schema_migra_colunas_novas_em_banco_ja_existente():
     repo.init_schema()  # não pode levantar
 
     columns = {row[1] for row in conn.execute("PRAGMA table_info(videos)").fetchall()}
-    assert {"thumbnail_url", "transcript"} <= columns
+    assert {"thumbnail_url", "transcript", "transcript_source"} <= columns
     row = conn.execute("SELECT title FROM videos WHERE video_id = 'v1'").fetchone()
     assert row[0] == "Já existia antes da Fase 5"  # dado antigo preservado
-
     repo.init_schema()  # roda de novo — idempotente, não pode levantar na 2a vez
+
+
+def test_roundtrip_transcript_source(any_repo):
+    # Proveniência da transcrição (Fase 7, Whisper fallback): 'caption' vs
+    # 'whisper' precisa sobreviver ao save/load, pra nunca misturar as duas
+    # fontes silenciosamente ao analisar resultados depois.
+    meta = VideoMetadata(
+        video_id="v", channel_id="c", title="t", duration_s=30, published_at=T0,
+        transcript="transcrito via whisper", transcript_source="whisper",
+    )
+    any_repo.save_metadata(meta)
+    any_repo.save_snapshot(_snap("v", 0, 100))
+
+    loaded = any_repo.get_trajectory("v").metadata
+    assert loaded.transcript_source == "whisper"
+    assert any(m.transcript_source == "whisper" for m in any_repo.list_metadata())

@@ -52,7 +52,7 @@ class SqlTrajectoryRepository:
         `PRAGMA table_info` mostra que falta — `ADD COLUMN` sem essa checagem
         levantaria erro numa coluna que já existe."""
         existing = {row[1] for row in self._conn.execute("PRAGMA table_info(videos)").fetchall()}
-        for column in ("thumbnail_url", "transcript"):
+        for column in ("thumbnail_url", "transcript", "transcript_source"):
             if column not in existing:
                 self._conn.execute(f"ALTER TABLE videos ADD COLUMN {column} TEXT")
 
@@ -75,8 +75,8 @@ class SqlTrajectoryRepository:
         self._conn.execute(
             "INSERT OR REPLACE INTO videos "
             "(video_id, channel_id, title, duration_s, published_at, "
-            " channel_subscribers, tags, category, thumbnail_url, transcript) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " channel_subscribers, tags, category, thumbnail_url, transcript, transcript_source) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 metadata.video_id,
                 metadata.channel_id,
@@ -88,6 +88,7 @@ class SqlTrajectoryRepository:
                 metadata.category,
                 metadata.thumbnail_url,
                 metadata.transcript,
+                metadata.transcript_source,
             ),
         )
         self._conn.commit()
@@ -139,7 +140,8 @@ class SqlTrajectoryRepository:
     def list_metadata(self) -> list[VideoMetadata]:
         rows = self._conn.execute(
             "SELECT video_id, channel_id, title, duration_s, published_at, "
-            "       channel_subscribers, tags, category, thumbnail_url, transcript FROM videos"
+            "       channel_subscribers, tags, category, thumbnail_url, transcript, "
+            "       transcript_source FROM videos"
         ).fetchall()
         return [self._row_to_metadata(r) for r in rows]
 
@@ -151,8 +153,8 @@ class SqlTrajectoryRepository:
     def _load_metadata(self, video_id: str) -> VideoMetadata | None:
         row = self._conn.execute(
             "SELECT video_id, channel_id, title, duration_s, published_at, "
-            "       channel_subscribers, tags, category, thumbnail_url, transcript "
-            "FROM videos WHERE video_id = ?",
+            "       channel_subscribers, tags, category, thumbnail_url, transcript, "
+            "       transcript_source FROM videos WHERE video_id = ?",
             (video_id,),
         ).fetchone()
         if row is None:
@@ -172,4 +174,5 @@ class SqlTrajectoryRepository:
             category=row[7] or "unknown",
             thumbnail_url=row[8] or "",
             transcript=row[9] or "",
+            transcript_source=row[10] or "",
         )

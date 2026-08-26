@@ -38,6 +38,15 @@ def _run_discover(c: composition.Container, query: str, max_results: int, langua
     (Fase 5, Motor B multimodal) é buscada à parte via
     `collect/transcript_api.py` — mecanismo separado, não gasta cota da
     Data API, best-effort (vídeo sem legenda vira string vazia, não quebra).
+
+    Fase 7: se não há legenda E `Settings.whisper_fallback_enabled` está
+    ligado, tenta Whisper como fallback (`collect/whisper_transcribe.py`) —
+    NUNCA o contrário (legenda é sempre a primeira tentativa, mais barata).
+    O import de `whisper_transcribe` é preguiçoso e só acontece dentro do
+    `if`: com o fallback desligado (padrão), as dependências pesadas
+    (`faster-whisper`/`yt-dlp`, extra `[whisper]`) nem precisam estar
+    instaladas. `transcript_source` registra a proveniência ('caption' |
+    'whisper' | '') pra nunca misturar as duas fontes silenciosamente.
     """
     import dataclasses
     from datetime import timedelta
@@ -48,8 +57,14 @@ def _run_discover(c: composition.Container, query: str, max_results: int, langua
     since = c.clock.now() - timedelta(hours=6)
     ids = yt.search_recent(query, published_after=since, max_results=max_results, language=language)
     for meta in yt.fetch_metadata(ids):
-        transcript = fetch_transcript_text(meta.video_id) or ""
-        meta = dataclasses.replace(meta, transcript=transcript)
+        transcript = fetch_transcript_text(meta.video_id)
+        source = "caption" if transcript else ""
+        if not transcript and c.settings.whisper_fallback_enabled:
+            from .collect.whisper_transcribe import transcribe_via_whisper
+
+            transcript = transcribe_via_whisper(meta.video_id)
+            source = "whisper" if transcript else ""
+        meta = dataclasses.replace(meta, transcript=transcript or "", transcript_source=source)
         c.repo.save_metadata(meta)
         c.connection.execute(
             "UPDATE videos SET first_seen_at = COALESCE(first_seen_at, ?), active = 1 "

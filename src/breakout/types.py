@@ -53,6 +53,7 @@ class VideoMetadata:
     category: str = "unknown"
     thumbnail_url: str = ""    # Motor B multimodal (Fase 5): CV
     transcript: str = ""       # Motor B multimodal (Fase 5): legendas
+    transcript_source: str = ""  # Fase 7: 'caption' | 'whisper' | '' (sem transcrição)
 
 
 @dataclass(slots=True)

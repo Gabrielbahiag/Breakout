@@ -50,6 +50,14 @@ engines = [
     "matplotlib>=3.8",
     "plotly>=5.20",
 ]
+# Fallback de transcrição via Whisper (Fase 7) — pesado E opcional, fora do
+# [prod] padrão: só instala quando discover.yml roda com o fallback ligado
+# (usar_whisper_fallback=true), nunca em toda rodada comum de discover.
+# faster-whisper (CTranslate2), não openai-whisper — evita torch.
+whisper = [
+    "faster-whisper>=1.0",
+    "yt-dlp>=2024.4",
+]
 
 [project.scripts]
 breakout = "breakout.cli:app"
