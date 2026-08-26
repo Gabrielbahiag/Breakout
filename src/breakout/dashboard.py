@@ -25,6 +25,7 @@ import streamlit as st
 from sklearn.model_selection import train_test_split
 
 from breakout import composition
+from breakout.collect import dispatch as dispatch_mod
 from breakout.collect import topics as topics_mod
 from breakout.engine_a.baseline import BaselineDetector
 from breakout.engine_a.changepoint import BocpdDetector, CusumDetector, KleinbergBurstDetector
@@ -196,6 +197,38 @@ with st.sidebar:
                     st.rerun()
         except Exception:
             st.caption("Não foi possível conectar ao banco pra editar nichos agora.")
+
+    with st.expander(":material/bolt: Disparar coleta agora"):
+        st.caption(
+            "Pede pro GitHub Actions rodar agora, fora do cron — o dashboard "
+            "nunca escreve no Turso direto, só enfileira o workflow (igual a "
+            "clicar 'Run workflow' manualmente)."
+        )
+        settings = _container().settings
+        token = settings.github_dispatch_token
+        if not token:
+            st.caption(
+                "Secret `github_dispatch_token` não configurado — veja Seção "
+                "10 do CLAUDE.md pra gerar um GitHub PAT fine-grained "
+                "(escopo Actions, só este repositório)."
+            )
+        col_collect, col_discover = st.columns(2)
+        if col_collect.button("Disparar collect agora", disabled=not token):
+            ok, mensagem = dispatch_mod.trigger_workflow(
+                token=token,
+                owner=settings.github_owner,
+                repo=settings.github_repo,
+                workflow_file="collect.yml",
+            )
+            (st.success if ok else st.error)(mensagem)
+        if col_discover.button("Disparar discover agora", disabled=not token):
+            ok, mensagem = dispatch_mod.trigger_workflow(
+                token=token,
+                owner=settings.github_owner,
+                repo=settings.github_repo,
+                workflow_file="discover.yml",
+            )
+            (st.success if ok else st.error)(mensagem)
 
     st.divider()
     st.subheader("Fonte dos dados")

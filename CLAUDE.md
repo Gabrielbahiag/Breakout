@@ -30,7 +30,7 @@ teto honesto do problema.
 
 ## 2. Estado atual (o que já existe)
 
-O esqueleto **já está construído e roda verde**: `pytest` → 155 testes passando,
+O esqueleto **já está construído e roda verde**: `pytest` → 164 testes passando,
 **zero `xfail`**. **Fase 0 fechada de verdade**: repo público
 (`Gabrielbahiag/Breakout`), Turso em produção, YouTube API key configurada,
 coletor rodando no cron do GitHub Actions e já validado com dados reais
@@ -288,7 +288,8 @@ breakout/
 │   │   ├── policy.py        # cadência adaptativa sem estado (select_due/retire_stale)
 │   │   ├── youtube_api.py   # adaptador real (403 quota vs 429 rate limit)
 │   │   ├── transcript_api.py# ✅ Fase 5: legenda via youtube-transcript-api (não é a Data API)
-│   │   └── topics.py        # ✅ Fase 7: discover_topics (nichos/idioma, editável pelo dashboard)
+│   │   ├── topics.py        # ✅ Fase 7: discover_topics (nichos/idioma, editável pelo dashboard)
+│   │   └── dispatch.py      # ✅ Fase 7: dispara workflow_dispatch do GitHub (collect/discover)
 │   ├── storage/
 │   │   ├── schema.sql       # verdade (videos, snapshots) vs derivado (detections, labels)
 │   │   ├── sql_repository.py# SqlTrajectoryRepository (sqlite local OU Turso)
@@ -358,14 +359,23 @@ completo:
    nos Secrets do GitHub Actions. **Nunca no disco da máquina do trabalho.**
 4. ✅ **Coletor ligado** (`collect.yml`, cron `:23`) — já acumulando trajetórias
    reais.
-5. ⬜ **Dashboard no Streamlit Community Cloud**: `dashboard.py` já existe e
-   funciona (testado localmente com `AppTest`) — falta só o deploy em si.
-   Passos: criar conta em `share.streamlit.io` (login GitHub), apontar pro
-   repo/`src/breakout/dashboard.py`, e configurar os MESMOS três secrets nos
-   **Secrets do app Streamlit** (formato TOML, painel do app → Settings →
-   Secrets). O ambiente do Streamlit Cloud é Linux, então `[prod]` (libsql)
-   instala normal — diferente da máquina de trabalho. Dependências pra
-   declarar no deploy: `.[prod,dashboard]`.
+5. ✅ **Dashboard no Streamlit Community Cloud**: deployado, com os mesmos
+   três secrets (`YOUTUBE_API_KEY`, `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`)
+   configurados nos **Secrets do app Streamlit** (formato TOML, painel do
+   app → Settings → Secrets). Dependências declaradas via `requirements.txt`
+   na raiz (`.[prod,dashboard]`) — Streamlit Cloud prioriza esse arquivo
+   sobre `pyproject.toml`.
+6. ⬜ **Secret `github_dispatch_token`** (Fase 7, Parte 2 do disparo de
+   coleta pelo dashboard): gerar um GitHub Personal Access Token
+   **fine-grained** (não um token clássico amplo) — GitHub → ícone do perfil
+   → Settings → Developer settings → Personal access tokens → Fine-grained
+   tokens → "Generate new token", escopo "Only select repositories" →
+   `Gabrielbahiag/Breakout`, permissão "Actions: Read and write" (nenhuma
+   outra permissão é necessária). Adicionar como secret
+   `github_dispatch_token` no painel do app Streamlit (mesmo lugar dos
+   outros três). **Primeiro secret do projeto com poder de ESCRITA de
+   verdade** (os outros são credenciais de leitura de dados) — nunca reusar
+   esse token pra outra finalidade, e revogar se vazar.
 
 > Perf com Turso remoto: `save_snapshot` faz `commit()` por chamada, o que é um
 > round-trip HTTP por snapshot. Numa coleta em lote isso é lento — otimização de
@@ -485,11 +495,18 @@ por nada) · `matplotlib`/`plotly`.
       (`st.image`), a tabela de features (incluindo as de CV/transcrição) e
       um trecho da transcrição. Testado com `AppTest` +
       `respx` (`tests/unit/test_dashboard_multimodal.py`).
-    - ⬜ **Parte 2 pendente:** botão no dashboard dispara `collect`/
-      `discover` via API do GitHub (`workflow_dispatch` remoto) — preserva
-      "dashboard read-only" (nunca escreve no Turso direto), mas introduz o
-      PRIMEIRO secret do projeto com poder de escrita de verdade (GitHub PAT
-      fine-grained, escopo Actions).
+    - ✅ **Parte 2 fechada (código, 2026-08-26):** botões "Disparar
+      collect/discover agora" na sidebar — `collect/dispatch.py`
+      (`build_dispatch_request` pura + `trigger_workflow` best-effort sobre
+      `httpx.post`, nunca levanta), `Settings.github_dispatch_token`
+      (secret, vazio por padrão => botões desabilitados) e
+      `github_owner`/`github_repo` (config, não secret). Preserva "dashboard
+      read-only" (nunca escreve no Turso direto) — introduz o PRIMEIRO
+      secret do projeto com poder de escrita de verdade (GitHub PAT
+      fine-grained, escopo Actions só neste repo; passo a passo de geração
+      na Seção 10). ⬜ Falta só o usuário gerar o PAT e configurar o secret
+      no Streamlit Cloud — sem isso os botões ficam visíveis e desabilitados
+      (comportamento seguro por padrão), não é bloqueio de código.
 
 ---
 

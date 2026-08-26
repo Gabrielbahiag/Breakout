@@ -73,7 +73,7 @@ condição do filtro — não só os valores que estão sendo filtrados — ante
 suspeitar do framework de teste. Corrigido trocando o filtro para
 `"multimoda" in label.lower()` (cobre singular e plural).
 
-## Parte 2 — disparar coleta pelo dashboard (via GitHub API)
+## Parte 2 — disparar coleta pelo dashboard (via GitHub API) ✅ FECHADA (código)
 
 ### Contexto e decisão confirmada
 
@@ -117,6 +117,31 @@ própria tela do dashboard.
   payload com o `ref` certo.
 - Cenário "secret ausente": a função/UI devolve uma mensagem clara, não
   levanta exceção não tratada.
+
+### Implementado (2026-08-26)
+
+Código e testes prontos, exatamente conforme planejado:
+- `src/breakout/collect/dispatch.py` — `build_dispatch_request` (pura, monta
+  URL/headers/payload) + `trigger_workflow` (best-effort sobre `httpx.post`,
+  nunca levanta — token ausente, credencial inválida e erro de rede viram
+  `(False, mensagem)`, não exceção). `tests/unit/test_dispatch.py` (6 testes,
+  escritos e confirmados falhando ANTES da implementação).
+- `Settings` ganhou `github_dispatch_token` (secret, vazio por padrão =
+  botões desabilitados), `github_owner`/`github_repo` (config de produto,
+  não secret — nomes do repositório, default `Gabrielbahiag`/`Breakout`).
+- `dashboard.py`: novo expander "Disparar coleta agora" na sidebar, com os
+  dois botões (`collect.yml` e `discover.yml`) desabilitados quando o secret
+  não está configurado, `st.success`/`st.error` conforme o resultado de
+  `trigger_workflow`. Disparar `discover.yml` SEM `query` já roda
+  `discover-all` sobre os nichos do Plano C (ver `discover.yml`) — não
+  precisa pedir um termo avulso no dashboard. `tests/unit/
+  test_dashboard_dispatch.py` (3 testes com `AppTest` + `respx`).
+
+**Pendente (não é código, é operacional):** o usuário ainda precisa GERAR o
+GitHub PAT fine-grained (escopo Actions, só este repositório) e configurá-lo
+como secret `github_dispatch_token` no painel do app Streamlit Cloud (ver
+Seção 10 do CLAUDE.md) — sem isso os botões ficam visíveis mas desabilitados
+em produção, que é o comportamento seguro por padrão.
 - `AppTest`: clicar no botão dispara a chamada mockada (via `respx`) e o
   `st.success`/`st.error` aparece conforme o resultado mockado (sucesso vs.
   falha HTTP).

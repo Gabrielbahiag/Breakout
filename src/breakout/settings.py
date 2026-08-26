@@ -16,6 +16,11 @@ class Settings(BaseSettings):
     youtube_api_key: str = ""
     turso_database_url: str = ""     # vazio => usa SQLite local
     turso_auth_token: str = ""
+    github_dispatch_token: str = ""  # vazio => botões de disparo no dashboard ficam desabilitados
+
+    # --- repo alvo do disparo remoto (não é segredo, é config de produto) ---
+    github_owner: str = "Gabrielbahiag"
+    github_repo: str = "Breakout"
 
     # --- storage local (dev) ---
     local_db_path: str = "data/breakout.db"
