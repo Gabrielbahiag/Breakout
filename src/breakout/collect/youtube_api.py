@@ -58,22 +58,28 @@ class YouTubeApiClient:
                 raise RateLimited(reason) from error
         raise error
 
-    def search_recent(self, query: str, published_after: datetime, max_results: int = 50) -> list[str]:
+    def search_recent(
+        self,
+        query: str,
+        published_after: datetime,
+        max_results: int = 50,
+        language: str | None = None,
+    ) -> list[str]:
+        params = dict(
+            q=query,
+            part="id",
+            type="video",
+            order="date",
+            videoDuration="short",  # <4min — o filtro mais próximo de Shorts na API
+            publishedAfter=published_after.isoformat().replace("+00:00", "Z"),
+            maxResults=min(max_results, 50),
+        )
+        if language:
+            # Só dica de RELEVÂNCIA pra API — não filtra estritamente por
+            # idioma, é o único controle que a search.list oferece pra isso.
+            params["relevanceLanguage"] = language
         try:
-            resp = (
-                self._service()
-                .search()
-                .list(
-                    q=query,
-                    part="id",
-                    type="video",
-                    order="date",
-                    videoDuration="short",  # <4min — o filtro mais próximo de Shorts na API
-                    publishedAfter=published_after.isoformat().replace("+00:00", "Z"),
-                    maxResults=min(max_results, 50),
-                )
-                .execute()
-            )
+            resp = self._service().search().list(**params).execute()
         except Exception as e:  # noqa: BLE001 — reclassifica p/ quota/rate
             self._raise_for_quota(e)
             raise

@@ -50,6 +50,20 @@ CREATE TABLE IF NOT EXISTS collection_runs (
     note              TEXT
 );
 
+-- ─────────────────────── CONFIGURAÇÃO ───────────────────────────
+-- Nem verdade coletada, nem derivado de snapshot: preferência operacional
+-- de produto. Única tabela que o dashboard tem permissão de ESCREVER (Fase
+-- 7) — exceção documentada ao "dashboard read-only" da Seção 5 do CLAUDE.md,
+-- justamente porque não é dado colhido, é config (trocar nicho não arrisca
+-- corromper o núcleo append-only sagrado).
+CREATE TABLE IF NOT EXISTS discover_topics (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    query      TEXT    NOT NULL,
+    language   TEXT,                          -- ISO 639-1 (ex: 'pt'), opcional
+    active     INTEGER DEFAULT 1,              -- 0 = pausado sem apagar histórico
+    created_at TEXT
+);
+
 -- ────────────────────────── DERIVADO ───────────────────────────
 -- Preenchido pelos jobs offline. Sempre reconstruível dos snapshots.
 

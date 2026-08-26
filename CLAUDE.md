@@ -30,16 +30,20 @@ teto honesto do problema.
 
 ## 2. Estado atual (o que já existe)
 
-O esqueleto **já está construído e roda verde**: `pytest` → 113 testes passando,
+O esqueleto **já está construído e roda verde**: `pytest` → 152 testes passando,
 **zero `xfail`**. **Fase 0 fechada de verdade**: repo público
 (`Gabrielbahiag/Breakout`), Turso em produção, YouTube API key configurada,
 coletor rodando no cron do GitHub Actions e já validado com dados reais
 (`discover` semeou vídeos, `collect` gravou snapshots reais no Turso). **Motor A
 completo** (baseline + CUSUM + Kleinberg + BOCPD + PELT + bake-off com curva de
-sensibilidade). **Motor B — Fase 4 fechada** (label + features + model + explain,
-validados com dataset sintético de sinal plantado). **Dashboard (`dashboard.py`)
-pronto e testado localmente** (modo dados reais + modo demo sintético) — falta só
-o deploy no Streamlit Community Cloud (Seção 10). O que está pronto vs. pendente:
+sensibilidade). **Motor B fechado até a Fase 5** (label + features + model +
+explain + multimodal thumbnail/legenda, validados com dataset sintético de
+sinal plantado). **Dashboard (`dashboard.py`) pronto e testado localmente**
+(modo dados reais + modo demo sintético, editor de nichos do discover
+automático) — falta só o deploy no Streamlit Community Cloud (Seção 10). Fase
+7 (melhorias planejadas em 2026-08-25) já tem a automação do `discover`
+fechada; reconhecimento facial, Whisper e conectar multimodal ao dashboard
+seguem em `planning/`. O que está pronto vs. pendente:
 
 **Pronto e testado:** contratos (Protocols), tipos do domínio, gerador de
 trajetórias sintéticas (`synth`), fakes de teste, coletor de snapshots, harness de
@@ -186,8 +190,11 @@ máquina; execução na nuvem.
 
 Três ciclos de vida sobre um núcleo e um storage: **coletor** (efêmero, só escreve
 a verdade), **jobs offline** de análise (batch, só escrevem derivado) e
-**dashboard** (read-only). Em dev, o Turso é substituído por um SQLite local — a
-troca é só a conexão no composition root.
+**dashboard** (read-only pra `videos`/`snapshots` — a única exceção é
+`discover_topics`, Fase 7: config de nicho/idioma do discover automático, que
+não é dado coletado, então o dashboard tem permissão de escrever ali). Em dev,
+o Turso é substituído por um SQLite local — a troca é só a conexão no
+composition root.
 
 ---
 
@@ -267,20 +274,21 @@ breakout/
 ├── .github/workflows/
 │   ├── ci.yml           # roda pytest a cada push
 │   ├── collect.yml      # coletor agendado (cron), chama `collect --once`
-│   └── discover.yml     # semeia a carteira (disparo manual — gasta cota de search)
+│   └── discover.yml     # semeia a carteira — manual (1 termo) OU cron diário (discover-all)
 ├── src/breakout/
 │   ├── types.py         # Snapshot, VideoMetadata, Trajectory, Detection, GroundTruth, Archetype
 │   ├── contracts.py     # os 4 Protocols
 │   ├── settings.py      # config via pydantic-settings
 │   ├── clock.py         # SystemClock (real)
 │   ├── composition.py   # composition root: contratos ↔ impl reais
-│   ├── cli.py           # Typer: initdb/discover/collect/detect/dashboard
+│   ├── cli.py           # Typer: initdb/discover/discover-all/collect/detect/dashboard
 │   ├── __main__.py      # `python -m breakout`
 │   ├── collect/
 │   │   ├── snapshots.py     # SnapshotCollector (usa Clock+Client+Repo injetados)
 │   │   ├── policy.py        # cadência adaptativa sem estado (select_due/retire_stale)
 │   │   ├── youtube_api.py   # adaptador real (403 quota vs 429 rate limit)
-│   │   └── transcript_api.py# ✅ Fase 5: legenda via youtube-transcript-api (não é a Data API)
+│   │   ├── transcript_api.py# ✅ Fase 5: legenda via youtube-transcript-api (não é a Data API)
+│   │   └── topics.py        # ✅ Fase 7: discover_topics (nichos/idioma, editável pelo dashboard)
 │   ├── storage/
 │   │   ├── schema.sql       # verdade (videos, snapshots) vs derivado (detections, labels)
 │   │   ├── sql_repository.py# SqlTrajectoryRepository (sqlite local OU Turso)
@@ -456,12 +464,16 @@ por nada) · `matplotlib`/`plotly`.
     áudio via `yt-dlp`, nunca persiste mídia. Novo extra `[whisper]`,
     op-in por execução do `discover.yml` (custo de tempo por vídeo ainda
     não medido).
-  - ⬜ **Automação do `discover`** (multi-nicho + idioma) —
-    `planning/discover-automatico.md`. Config versionada
-    `discover_topics.yml` (lista de nichos escolhidos pelo usuário, não um
-    termo fixo); `search_recent` ganha parâmetro `language`
-    (`relevanceLanguage` da API); `discover.yml` ganha `schedule:` além do
-    `workflow_dispatch` existente.
+  - ✅ **Automação do `discover`** (multi-nicho + idioma) — Fechada.
+    `planning/discover-automatico.md`. Design mudou durante a execução: em
+    vez de arquivo versionado, os nichos ficam numa tabela (`discover_topics`)
+    editável DIRETO PELO DASHBOARD (o usuário pediu — trocar nicho não pode
+    depender de commit/deploy). `collect/topics.py` (CRUD sobre a tabela),
+    `search_recent` ganhou `language` (`relevanceLanguage` da API, dica de
+    relevância não filtro estrito), `discover.yml` ganhou `schedule:` (cron
+    diário) além do `workflow_dispatch` — manual com `query` = termo avulso;
+    manual sem `query` ou cron = `discover-all` (todos os nichos ativos).
+    Lista começa VAZIA — usuário adiciona nichos pelo dashboard quando quiser.
   - ⬜ **Dashboard: multimodal + disparo de coleta** —
     `planning/dashboard-multimodal-e-coleta.md`. Parte 1: mostrar
     thumbnail/transcrição no dashboard (`with_multimodal=True` opcional,

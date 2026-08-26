@@ -25,6 +25,7 @@ import streamlit as st
 from sklearn.model_selection import train_test_split
 
 from breakout import composition
+from breakout.collect import topics as topics_mod
 from breakout.engine_a.baseline import BaselineDetector
 from breakout.engine_a.changepoint import BocpdDetector, CusumDetector, KleinbergBurstDetector
 from breakout.engine_a.metrics import crossing_hours, lead_time_hours
@@ -73,8 +74,21 @@ DETECTOR_DESCRIPTIONS = {
 
 
 @st.cache_resource
+def _container():
+    c = composition.build()
+    c.repo.init_schema()  # idempotente — garante discover_topics (Fase 7) já na 1a visita
+    return c
+
+
 def _repo():
-    return composition.build().repo
+    return _container().repo
+
+
+def _connection():
+    """Conexão bruta — só pra `discover_topics` (Fase 7), a ÚNICA tabela que
+    o dashboard tem permissão de escrever (não é dado coletado, é
+    configuração de produto; ver schema.sql)."""
+    return _container().connection
 
 
 @st.cache_data(ttl="10m")
@@ -149,6 +163,41 @@ st.title("Breakout")
 st.caption("Detector de viralização de vídeos curtos — quando decola (Motor A), e por quê (Motor B).")
 
 with st.sidebar:
+    with st.expander(":material/target: Nichos do discover automático"):
+        st.caption(
+            "Nichos/idiomas que o discover automático (cron diário) rastreia — "
+            "editar aqui não precisa de commit nem deploy."
+        )
+        try:
+            conn = _connection()
+            clock = _container().clock
+            existing_topics = topics_mod.list_topics(conn, only_active=False)
+
+            for t in existing_topics:
+                label = t.query + (f" ({t.language})" if t.language else "")
+                cols = st.columns([3, 1, 1])
+                cols[0].write(("~~" + label + "~~") if not t.active else label)
+                if cols[1].button(
+                    ":material/pause:" if t.active else ":material/play_arrow:",
+                    key=f"toggle_topic_{t.id}",
+                    help="Pausar" if t.active else "Reativar",
+                ):
+                    topics_mod.set_active(conn, t.id, not t.active)
+                    st.rerun()
+                if cols[2].button(":material/delete:", key=f"del_topic_{t.id}", help="Remover"):
+                    topics_mod.remove_topic(conn, t.id)
+                    st.rerun()
+
+            with st.form("novo_nicho_form", clear_on_submit=True):
+                new_query = st.text_input("Novo nicho/palavra-chave")
+                new_language = st.selectbox("Idioma", ["", "pt", "en"], help="Opcional — dica de relevância pra busca.")
+                if st.form_submit_button("Adicionar") and new_query.strip():
+                    topics_mod.add_topic(conn, new_query, new_language or None, now=clock.now())
+                    st.rerun()
+        except Exception:
+            st.caption("Não foi possível conectar ao banco pra editar nichos agora.")
+
+    st.divider()
     st.subheader("Fonte dos dados")
     mode = st.radio(
         "Modo", ["Demo sintético", "Dados reais"], label_visibility="collapsed"

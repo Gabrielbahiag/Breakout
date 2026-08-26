@@ -1,18 +1,24 @@
 name: discover
 
-# Semeia a carteira de vídeos. Disparo manual só — descobrir gasta cota de
-# search (100 unidades/chamada), então não roda em cron: quem decide quando
-# gastar é o dev, na aba Actions > discover > Run workflow.
+# Semeia a carteira de vídeos.
+#   - Disparo manual (workflow_dispatch) com `query` preenchido: busca UM
+#     termo avulso — você decide hora e cota gasta (100 unidades/chamada).
+#   - Disparo manual SEM `query`, ou cron diário (Fase 7): roda `discover-all`
+#     sobre os nichos ATIVOS em `discover_topics` — lista editável pelo
+#     dashboard (ou por SQL direto), sem precisar mexer neste workflow pra
+#     trocar de nicho/idioma.
 on:
   workflow_dispatch:
     inputs:
       query:
-        description: "termo de busca"
-        required: true
+        description: "termo de busca avulso (deixe vazio pra rodar discover-all sobre discover_topics)"
+        required: false
       max_results:
-        description: "máximo de vídeos a semear"
+        description: "máximo de vídeos a semear (só usado com `query`)"
         required: false
         default: "50"
+  schedule:
+    - cron: "17 3 * * *"   # diário, fora do pico (mesma lógica do :23 do collect)
 
 jobs:
   seed:
@@ -24,9 +30,17 @@ jobs:
           python-version: "3.12"
       - name: Instalar dependências de produção
         run: pip install -e ".[prod]"
-      - name: Descobrir e semear
+      - name: Descobrir um termo avulso
+        if: github.event_name == 'workflow_dispatch' && inputs.query != ''
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
         run: python -m breakout discover --query "${{ inputs.query }}" --max-results ${{ inputs.max_results }}
+      - name: Descobrir todos os nichos ativos (discover_topics)
+        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.query == '')
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+        run: python -m breakout discover-all

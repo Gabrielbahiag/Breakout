@@ -39,9 +39,17 @@ class YouTubeClient(Protocol):
     """
 
     def search_recent(
-        self, query: str, published_after: datetime, max_results: int = 50
+        self,
+        query: str,
+        published_after: datetime,
+        max_results: int = 50,
+        language: str | None = None,
     ) -> list[str]:
-        """Devolve IDs de vídeos recentes (candidatos a entrar na coleta)."""
+        """Devolve IDs de vídeos recentes (candidatos a entrar na coleta).
+
+        `language` (ISO 639-1, ex: "pt"/"en") é só uma DICA de relevância pra
+        API (`relevanceLanguage`) — não filtra estritamente por idioma, é o
+        único controle que a Data API oferece pra isso."""
         ...
 
     def fetch_stats(self, video_ids: list[str]) -> list[RawStats]:

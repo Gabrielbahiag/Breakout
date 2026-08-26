@@ -38,8 +38,14 @@ class FakeYouTubeClient:
             self._ptr[vid] = min(self._ptr[vid] + 1, len(series) - 1)
 
     # ---- interface YouTubeClient ---------------------------------------
-    def search_recent(self, query: str, published_after: datetime, max_results: int = 50) -> list[str]:
-        self.calls.append(("search_recent", (query,)))
+    def search_recent(
+        self,
+        query: str,
+        published_after: datetime,
+        max_results: int = 50,
+        language: str | None = None,
+    ) -> list[str]:
+        self.calls.append(("search_recent", (query, language)))
         return [v for v in self._views if v not in self.deleted][:max_results]
 
     def fetch_stats(self, video_ids: list[str]) -> list[RawStats]:

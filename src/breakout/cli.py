@@ -4,7 +4,8 @@ Cada subcomando é uma composição enxuta: monta o Container e delega. O GitHub
 Actions chama `breakout collect --once`; você chama `breakout dashboard` local.
 
     breakout initdb                 aplica o schema no banco configurado
-    breakout discover --query "..." descobre vídeos recentes e semeia a carteira
+    breakout discover --query "..." descobre vídeos recentes pra UM termo
+    breakout discover-all           descobre pra cada nicho ATIVO em discover_topics
     breakout collect [--once]       tira uma rodada de snapshots dos vídeos vencidos
     breakout detect                 job offline: roda detectores e grava detecções
     breakout dashboard              sobe o Streamlit (replay ao vivo do Motor A)
@@ -28,9 +29,10 @@ def initdb() -> None:
     typer.echo("schema aplicado.")
 
 
-@app.command()
-def discover(query: str = typer.Option(..., help="termo de busca"), max_results: int = 50) -> None:
-    """Descobre vídeos recentes e os semeia na carteira (gasta cota de search).
+def _run_discover(c: composition.Container, query: str, max_results: int, language: str | None = None) -> int:
+    """Busca + semeia UM termo. Devolve quantos vídeos foram descobertos.
+    Compartilhado por `discover` (manual, um termo avulso) e `discover_all`
+    (automático, um nicho por vez de `discover_topics` — Fase 7).
 
     Thumbnail vem de graça no `fetch_metadata` (Data API oficial). Legenda
     (Fase 5, Motor B multimodal) é buscada à parte via
@@ -42,11 +44,9 @@ def discover(query: str = typer.Option(..., help="termo de busca"), max_results:
 
     from .collect.transcript_api import fetch_transcript_text
 
-    c = composition.build()
-    c.repo.init_schema()
     yt = c.youtube()
     since = c.clock.now() - timedelta(hours=6)
-    ids = yt.search_recent(query, published_after=since, max_results=max_results)
+    ids = yt.search_recent(query, published_after=since, max_results=max_results, language=language)
     for meta in yt.fetch_metadata(ids):
         transcript = fetch_transcript_text(meta.video_id) or ""
         meta = dataclasses.replace(meta, transcript=transcript)
@@ -57,7 +57,40 @@ def discover(query: str = typer.Option(..., help="termo de busca"), max_results:
             (c.clock.now().isoformat(), meta.video_id),
         )
     c.connection.commit()
-    typer.echo(f"descobertos e semeados: {len(ids)} vídeos.")
+    return len(ids)
+
+
+@app.command()
+def discover(
+    query: str = typer.Option(..., help="termo de busca"),
+    max_results: int = 50,
+    language: str = typer.Option(None, help="idioma (ex: pt, en) — dica de relevância, opcional"),
+) -> None:
+    """Descobre vídeos recentes pra UM termo avulso e os semeia na carteira
+    (gasta cota de search). Uso manual/ad-hoc — para nichos recorrentes,
+    prefira `discover-all` + `discover_topics` (editável pelo dashboard)."""
+    c = composition.build()
+    c.repo.init_schema()
+    n = _run_discover(c, query, max_results, language)
+    typer.echo(f"descobertos e semeados: {n} vídeos.")
+
+
+@app.command()
+def discover_all(max_results: int = 50) -> None:
+    """Roda `discover` pra cada nicho ATIVO em `discover_topics` (Fase 7) —
+    a lista que o dashboard permite editar sem mexer em código. Pensado pro
+    cron do `discover.yml`; sem nicho configurado, não faz nada (não é erro,
+    só não há o que buscar)."""
+    from .collect import topics as topics_mod
+
+    c = composition.build()
+    c.repo.init_schema()
+    active_topics = topics_mod.list_topics(c.connection)
+    if not active_topics:
+        typer.echo("nenhum nicho ativo em discover_topics — nada a fazer.")
+        return
+    total = sum(_run_discover(c, t.query, max_results, t.language) for t in active_topics)
+    typer.echo(f"descobertos e semeados: {total} vídeos em {len(active_topics)} nicho(s).")
 
 
 @app.command()
