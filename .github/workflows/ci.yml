@@ -15,6 +15,6 @@ jobs:
         with:
           python-version: "3.12"
       - name: Instalar dependências
-        run: pip install -e ".[dev]"
+        run: pip install -e ".[dev,dashboard]"
       - name: Rodar a suíte
         run: pytest -q
