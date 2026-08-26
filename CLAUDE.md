@@ -261,6 +261,7 @@ breakout/
 ├── CLAUDE.md            # este arquivo (contexto-mestre)
 ├── TESTING.md           # aprofundamento da camada de testes
 ├── ARCHITECTURE.md      # aprofundamento da execução/deploy
+├── planning/            # Fase 7: planos detalhados ainda não implementados
 ├── pyproject.toml       # deps, extras [dev]/[prod]/[dashboard]/[engines], config do pytest
 ├── .env.example         # YOUTUBE_API_KEY, TURSO_* (copie para .env em dev)
 ├── .github/workflows/
@@ -441,6 +442,34 @@ por nada) · `matplotlib`/`plotly`.
   quando há metadados). Testado localmente com `AppTest` (sem navegador) nos
   dois modos. ⬜ deploy no Streamlit Community Cloud (conta + conectar o repo —
   ver Seção 10) e README com o demo.
+- **Fase 7 — Melhorias planejadas (2026-08-25, ainda não implementadas).**
+  Planejamento detalhado em `planning/` (test-first — cada arquivo lista os
+  testes a escrever ANTES do código):
+  - ⬜ **Reconhecimento facial na thumbnail** via `cv2.FaceDetectorYN` (rede
+    YuNet) — `planning/reconhecimento-facial.md`. Reverte a decisão da Fase
+    5 de descartar contagem de rosto: o modelo `.onnx` é pequeno (~1-2MB,
+    não comparável a Whisper), plano é empacotá-lo como package data
+    (mesmo padrão do `schema.sql`).
+  - ⬜ **Transcrição via Whisper como FALLBACK** (só quando não há legenda)
+    — `planning/transcricao-whisper.md`. `faster-whisper` (não
+    `openai-whisper`, evita dependência de `torch`); pipeline baixa só
+    áudio via `yt-dlp`, nunca persiste mídia. Novo extra `[whisper]`,
+    op-in por execução do `discover.yml` (custo de tempo por vídeo ainda
+    não medido).
+  - ⬜ **Automação do `discover`** (multi-nicho + idioma) —
+    `planning/discover-automatico.md`. Config versionada
+    `discover_topics.yml` (lista de nichos escolhidos pelo usuário, não um
+    termo fixo); `search_recent` ganha parâmetro `language`
+    (`relevanceLanguage` da API); `discover.yml` ganha `schedule:` além do
+    `workflow_dispatch` existente.
+  - ⬜ **Dashboard: multimodal + disparo de coleta** —
+    `planning/dashboard-multimodal-e-coleta.md`. Parte 1: mostrar
+    thumbnail/transcrição no dashboard (`with_multimodal=True` opcional,
+    igual ao `features.py`). Parte 2 (confirmada pelo usuário): botão no
+    dashboard dispara `collect`/`discover` via API do GitHub
+    (`workflow_dispatch` remoto) — preserva "dashboard read-only" (nunca
+    escreve no Turso direto), mas introduz o PRIMEIRO secret do projeto com
+    poder de escrita de verdade (GitHub PAT fine-grained, escopo Actions).
 
 ---
 
