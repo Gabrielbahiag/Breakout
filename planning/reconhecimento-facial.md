@@ -1,8 +1,8 @@
 # Planejamento — Reconhecimento facial na thumbnail (rede neural)
 
-> Registrado em 2026-08-25. Ainda não implementado. Retomar seguindo
-> test-first (Princípio 4 do CLAUDE.md): escrever os testes da seção
-> "Testes" abaixo ANTES de tocar em código de produção.
+> Registrado em 2026-08-25. **Fechado em 2026-08-26** (test-first: os testes
+> da seção "Testes" abaixo foram escritos e confirmados falhando ANTES do
+> código de produção existir).
 
 ## Contexto
 
@@ -82,3 +82,39 @@ start.
 - Carregar o modelo (`FaceDetectorYN.create`) tem custo de I/O na primeira
   chamada — cachear a instância do detector (módulo-level ou
   `st.cache_resource` no dashboard), nunca recriar por imagem.
+
+## Implementado (2026-08-26)
+
+Exatamente conforme planejado, com uma correção de fixture:
+
+- API confirmada na versão instalada (`opencv-python-headless` 5.0.0):
+  `cv2.FaceDetectorYN.create(model_path, "", (w, h))` +
+  `.setInputSize((w, h))` + `.detect(image)` — igual ao pseudocódigo acima.
+- Modelo `face_detection_yunet_2023mar.onnx` do `opencv_zoo` (232KB, licença
+  MIT), commitado como `src/breakout/engine_b/models/
+  face_detection_yunet.onnx` + `FACE_DETECTION_YUNET_LICENSE.txt` (texto da
+  licença + atribuição). `models/` virou um subpacote de verdade
+  (`__init__.py`) pra `importlib.resources.files("breakout.engine_b.models")`
+  funcionar — sem isso `resources.files` não localiza o arquivo.
+  `pyproject.toml` ganhou `"breakout.engine_b.models" = ["*.onnx"]` em
+  `[tool.setuptools.package-data]`.
+- Detector é um singleton em nível de módulo (`_face_detector` global,
+  carregado uma vez em `_get_face_detector`), `setInputSize` reajustado a
+  cada chamada — nunca recria a instância por imagem, conforme o risco
+  listado acima.
+- Fixture de imagem com rosto: em vez de fotografar algo do zero, reusamos
+  `example_outputs/largest_selfie.jpg` do próprio `opencv_zoo` (mesma
+  licença MIT do modelo) — uma selfie de grupo com 16 rostos na resolução
+  original. Redimensionada pra 400×224px (~47KB) fez o detector cair pra 1
+  rosto de forma estável (resolução baixa apaga os rostos menores/mais
+  distantes), o que é exatamente o suficiente pro teste `>= 1`. Salva em
+  `tests/fixtures/rosto_exemplo.jpg` + `ROSTO_EXEMPLO_LICENSE.txt` (nota de
+  atribuição). Detalhe não-óbvio: o arquivo original no GitHub é servido via
+  Git LFS — baixar pela URL "raw" comum (`raw.githubusercontent.com`) traz só
+  um ponteiro de texto de ~130 bytes, não a imagem; é preciso a URL de mídia
+  do LFS (`media.githubusercontent.com/media/...`).
+- `tests/unit/test_thumbnail.py`: `set(feats)` no teste de features esperadas
+  passou a incluir `"thumb_face_count"`; dois testes novos (`== 0.0` pra
+  ruído aleatório, `>= 1.0` pro fixture com rosto). Nenhuma mudança em
+  `features.py`/`test_features.py` foi necessária — o dict de features
+  multimodais já é repassado por inteiro.

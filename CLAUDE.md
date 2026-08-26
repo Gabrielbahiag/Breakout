@@ -30,7 +30,7 @@ teto honesto do problema.
 
 ## 2. Estado atual (o que já existe)
 
-O esqueleto **já está construído e roda verde**: `pytest` → 164 testes passando,
+O esqueleto **já está construído e roda verde**: `pytest` → 166 testes passando,
 **zero `xfail`**. **Fase 0 fechada de verdade**: repo público
 (`Gabrielbahiag/Breakout`), Turso em produção, YouTube API key configurada,
 coletor rodando no cron do GitHub Actions e já validado com dados reais
@@ -38,12 +38,14 @@ coletor rodando no cron do GitHub Actions e já validado com dados reais
 completo** (baseline + CUSUM + Kleinberg + BOCPD + PELT + bake-off com curva de
 sensibilidade). **Motor B fechado até a Fase 5** (label + features + model +
 explain + multimodal thumbnail/legenda, validados com dataset sintético de
-sinal plantado). **Dashboard (`dashboard.py`) pronto e testado localmente**
-(modo dados reais + modo demo sintético, editor de nichos do discover
-automático) — falta só o deploy no Streamlit Community Cloud (Seção 10). Fase
-7 (melhorias planejadas em 2026-08-25) já tem a automação do `discover`
-fechada; reconhecimento facial, Whisper e conectar multimodal ao dashboard
-seguem em `planning/`. O que está pronto vs. pendente:
+sinal plantado). **Dashboard (`dashboard.py`) deployado no Streamlit
+Community Cloud** (modo dados reais + modo demo sintético, editor de nichos
+do discover automático, multimodal conectado, disparo de collect/discover
+via GitHub API). Fase 7 (melhorias planejadas em 2026-08-25) já tem
+automação do `discover`, conexão do multimodal + disparo de coleta pelo
+dashboard, e reconhecimento facial (rede YuNet) fechados; só Whisper como
+fallback de transcrição segue em `planning/`. O que está pronto vs.
+pendente:
 
 **Pronto e testado:** contratos (Protocols), tipos do domínio, gerador de
 trajetórias sintéticas (`synth`), fakes de teste, coletor de snapshots, harness de
@@ -65,12 +67,15 @@ adaptador real da YouTube API (filtrado por `videoDuration=short`, thumbnail
 incluída de graça no `fetch_metadata`), e os três workflows do GitHub Actions
 (`ci`, `collect` em cron, `discover` de disparo manual — este último existe
 porque `libsql-experimental` não tem wheel para Windows, então nada que
-precise de `[prod]` roda na máquina de trabalho). Motor B multimodal (Fase 5)
-— `thumbnail.py` (CV: brilho/saturação/colorfulness/densidade de bordas via
-OpenCV, contagem de rosto descartada porque o `opencv-python` 5.x removeu o
-`CascadeClassifier`) e `transcript.py` (heurísticas de texto sobre a legenda
-do YouTube, buscada em `collect/transcript_api.py` — decisão explícita de usar
-legenda em vez de Whisper, evita baixar áudio/vídeo e rodar modelo pesado).
+precise de `[prod]` roda na máquina de trabalho). Motor B multimodal (Fase
+5+7) — `thumbnail.py` (CV: brilho/saturação/colorfulness/densidade de bordas
+via OpenCV, MAIS contagem de rosto via rede neural leve `cv2.FaceDetectorYN`
+— YuNet, ~230KB, empacotada em `engine_b/models/`, Fase 7 — a Fase 5 tinha
+descartado isso por causa da remoção do `CascadeClassifier` clássico no
+`opencv-python` 5.x, revertido ao perceber que o modelo YuNet é leve) e
+`transcript.py` (heurísticas de texto sobre a legenda do YouTube, buscada em
+`collect/transcript_api.py` — decisão explícita de usar legenda em vez de
+Whisper, evita baixar áudio/vídeo e rodar modelo pesado).
 Ambas OPCIONAIS via `features.py`'s `with_multimodal=False` por padrão
 (thumbnail baixa imagem pela rede a cada chamada; ligar por padrão tornaria
 `extract_features` lenta/dependente de rede sem o caller pedir).
@@ -307,8 +312,9 @@ breakout/
 │   │   ├── features.py      # ✅ extract_features: estáticas (upload) + dinâmicas (via snapshots_before)
 │   │   ├── model.py         # ✅ RandomForestClassifier (train/evaluate, métricas honestas)
 │   │   ├── explain.py       # ✅ SHAP (TreeExplainer): feature_importance, shap_values
-│   │   ├── thumbnail.py     # ✅ Fase 5: features de CV (brilho/saturação/colorfulness/bordas)
-│   │   └── transcript.py    # ✅ Fase 5: features de texto sobre a legenda
+│   │   ├── thumbnail.py     # ✅ Fase 5+7: CV (brilho/saturação/colorfulness/bordas) + thumb_face_count (YuNet)
+│   │   ├── transcript.py    # ✅ Fase 5: features de texto sobre a legenda
+│   │   └── models/          # ✅ Fase 7: face_detection_yunet.onnx (package data, licença MIT)
 │   ├── synth/
 │   │   └── trajectories.py  # gerador sintético com verdade-conhecida (5 arquétipos)
 │   └── dashboard.py     # ✅ Streamlit: modo "dados reais" (Turso) + "demo sintético"
@@ -367,15 +373,30 @@ completo:
    sobre `pyproject.toml`.
 6. ⬜ **Secret `github_dispatch_token`** (Fase 7, Parte 2 do disparo de
    coleta pelo dashboard): gerar um GitHub Personal Access Token
-   **fine-grained** (não um token clássico amplo) — GitHub → ícone do perfil
-   → Settings → Developer settings → Personal access tokens → Fine-grained
-   tokens → "Generate new token", escopo "Only select repositories" →
-   `Gabrielbahiag/Breakout`, permissão "Actions: Read and write" (nenhuma
-   outra permissão é necessária). Adicionar como secret
-   `github_dispatch_token` no painel do app Streamlit (mesmo lugar dos
-   outros três). **Primeiro secret do projeto com poder de ESCRITA de
+   **fine-grained** (não um token clássico amplo):
+   1. GitHub → ícone do perfil (canto superior direito) → **Settings**.
+   2. Menu lateral esquerdo, até o fim → **Developer settings**.
+   3. **Personal access tokens** → **Fine-grained tokens** → botão
+      **"Generate new token"**.
+   4. Em **"Resource owner"**, garanta que está selecionada a sua conta
+      (`Gabrielbahiag`), não uma organização.
+   5. Em **"Repository access"**, marque **"Only select repositories"** e
+      escolha `Gabrielbahiag/Breakout` (nunca deixe em "All repositories").
+   6. Role até **"Permissions" → "Repository permissions"** — é uma lista
+      longa (Actions, Administration, Contents, Issues, Pull requests...),
+      cada uma com um dropdown individual que começa em "No access". Ache a
+      linha **"Actions"** especificamente e mude o dropdown dela para
+      **"Read and write"**. Deixe todas as outras permissões em "No access"
+      — nenhuma outra é necessária (nem "Contents", nem "Metadata" além do
+      que já vem marcado como obrigatório automaticamente).
+   7. Gere o token e copie o valor na hora (o GitHub só mostra uma vez).
+
+   Depois de gerado, adicionar como secret `github_dispatch_token` no painel
+   do app Streamlit (mesmo lugar dos outros três, Settings → Secrets,
+   formato TOML). **Primeiro secret do projeto com poder de ESCRITA de
    verdade** (os outros são credenciais de leitura de dados) — nunca reusar
-   esse token pra outra finalidade, e revogar se vazar.
+   esse token pra outra finalidade, e revogar em GitHub → Settings →
+   Developer settings → Fine-grained tokens se vazar.
 
 > Perf com Turso remoto: `save_snapshot` faz `commit()` por chamada, o que é um
 > round-trip HTTP por snapshot. Numa coleta em lote isso é lento — otimização de
@@ -449,28 +470,35 @@ por nada) · `matplotlib`/`plotly`.
   acumular outcomes suficientes.
 - **Fase 5 — Elementos: multimodal (Motor B).** ✅ Fechada. `thumbnail.py`
   (features de CV: brilho, saturação, colorfulness, densidade de bordas —
-  sem contagem de rosto, o `opencv-python` 5.x removeu o `CascadeClassifier`
-  clássico e o substituto exige baixar um modelo ONNX à parte, o que
-  contradiz a decisão abaixo). `transcript.py` + `collect/transcript_api.py`
-  (`youtube-transcript-api`): decisão consciente de usar LEGENDA do YouTube
-  em vez de Whisper — Whisper exigiria baixar áudio/vídeo (yt-dlp/ffmpeg) e
-  rodar um modelo pesado (torch), lento e frágil demais pro GitHub Actions
-  free tier; legenda é best-effort, sem mídia, sem gastar cota da Data API.
-  Ambas opcionais em `features.py` (`with_multimodal=False` por padrão).
-- **Fase 6 — Unificação + dashboard.** ✅ `dashboard.py` (Streamlit): curva com
-  ponto de decolagem marcado, KPIs de lead time, e a seção do Motor B (SHAP
-  sobre demo sintético enquanto dado real não acumula outcomes; features reais
-  quando há metadados). Testado localmente com `AppTest` (sem navegador) nos
-  dois modos. ⬜ deploy no Streamlit Community Cloud (conta + conectar o repo —
-  ver Seção 10) e README com o demo.
-- **Fase 7 — Melhorias planejadas (2026-08-25, ainda não implementadas).**
-  Planejamento detalhado em `planning/` (test-first — cada arquivo lista os
-  testes a escrever ANTES do código):
-  - ⬜ **Reconhecimento facial na thumbnail** via `cv2.FaceDetectorYN` (rede
-    YuNet) — `planning/reconhecimento-facial.md`. Reverte a decisão da Fase
-    5 de descartar contagem de rosto: o modelo `.onnx` é pequeno (~1-2MB,
-    não comparável a Whisper), plano é empacotá-lo como package data
-    (mesmo padrão do `schema.sql`).
+  contagem de rosto veio depois, na Fase 7). `transcript.py` +
+  `collect/transcript_api.py` (`youtube-transcript-api`): decisão consciente
+  de usar LEGENDA do YouTube em vez de Whisper — Whisper exigiria baixar
+  áudio/vídeo (yt-dlp/ffmpeg) e rodar um modelo pesado (torch), lento e
+  frágil demais pro GitHub Actions free tier; legenda é best-effort, sem
+  mídia, sem gastar cota da Data API. Ambas opcionais em `features.py`
+  (`with_multimodal=False` por padrão).
+- **Fase 6 — Unificação + dashboard.** ✅ Fechada. `dashboard.py` (Streamlit):
+  curva com ponto de decolagem marcado, KPIs de lead time, e a seção do
+  Motor B (SHAP sobre demo sintético enquanto dado real não acumula
+  outcomes; features reais quando há metadados). Testado localmente com
+  `AppTest` (sem navegador) nos dois modos. Deployado no Streamlit
+  Community Cloud (Seção 10).
+- **Fase 7 — Melhorias planejadas (2026-08-25).** Planejamento detalhado em
+  `planning/` (test-first — cada arquivo lista os testes a escrever ANTES do
+  código):
+  - ✅ **Reconhecimento facial na thumbnail** (2026-08-26) — `thumb_face_count`
+    via `cv2.FaceDetectorYN` (rede YuNet) em `thumbnail.py`. Reverte a
+    decisão da Fase 5 de descartar contagem de rosto: o modelo `.onnx` é
+    pequeno (~230KB, nada comparável a Whisper), empacotado como package
+    data em `engine_b/models/face_detection_yunet.onnx` (mesmo padrão do
+    `schema.sql`, via `importlib.resources`, licença MIT — ver
+    `FACE_DETECTION_YUNET_LICENSE.txt` na mesma pasta). Detector é um
+    singleton em nível de módulo (custo de I/O do modelo pago uma vez só).
+    `planning/reconhecimento-facial.md`. Testes em `test_thumbnail.py` usam
+    um fixture de foto real (`tests/fixtures/rosto_exemplo.jpg`, recorte
+    licenciado MIT do próprio repositório `opencv_zoo`) — não dá pra
+    sintetizar um rosto via numpy, então ruído aleatório só cobre o caso
+    "zero rostos".
   - ⬜ **Transcrição via Whisper como FALLBACK** (só quando não há legenda)
     — `planning/transcricao-whisper.md`. `faster-whisper` (não
     `openai-whisper`, evita dependência de `torch`); pipeline baixa só

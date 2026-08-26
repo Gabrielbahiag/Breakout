@@ -63,6 +63,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "breakout.storage" = ["*.sql"]
+"breakout.engine_b.models" = ["*.onnx"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src", "."]

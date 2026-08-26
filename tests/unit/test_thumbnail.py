@@ -1,11 +1,15 @@
 """Testes de extração de features de thumbnail (thumbnail.py).
 
 Mocka a fronteira externa real (o download HTTP via respx — Princípio 3 do
-CLAUDE.md: mockar só a rede, nunca o código interno). As imagens de teste são
-geradas na hora (preto/branco/colorida) via cv2.imencode, sem depender de
-nenhum arquivo externo.
+CLAUDE.md: mockar só a rede, nunca o código interno). A maioria das imagens de
+teste é gerada na hora (preto/branco/colorida) via cv2.imencode, sem depender
+de nenhum arquivo externo — a exceção é `rosto_exemplo.jpg`
+(`tests/fixtures/`), uma foto real necessária pra testar detecção facial de
+verdade (não dá pra sintetizar um rosto via numpy).
 """
 from __future__ import annotations
+
+from pathlib import Path
 
 import cv2
 import httpx
@@ -18,6 +22,7 @@ from breakout.engine_b.thumbnail import extract_thumbnail_features
 pytestmark = pytest.mark.unit
 
 URL = "https://i.ytimg.com/vi/abc123/hqdefault.jpg"
+ROSTO_EXEMPLO = Path(__file__).resolve().parents[1] / "fixtures" / "rosto_exemplo.jpg"
 
 
 def _jpeg_bytes(image: np.ndarray) -> bytes:
@@ -69,7 +74,24 @@ def test_todas_as_features_esperadas_presentes():
         "thumb_saturation",
         "thumb_colorfulness",
         "thumb_edge_density",
+        "thumb_face_count",
     }
     assert 0.0 <= feats["thumb_brightness"] <= 1.0
     assert 0.0 <= feats["thumb_saturation"] <= 1.0
     assert 0.0 <= feats["thumb_edge_density"] <= 1.0
+
+
+@respx.mock
+def test_imagem_sem_rosto_tem_face_count_zero():
+    # Ruído aleatório não tem rosto nenhum (imagem já usada no teste acima).
+    img = np.random.default_rng(0).integers(0, 255, size=(120, 120, 3), dtype=np.uint8)
+    respx.get(URL).mock(return_value=httpx.Response(200, content=_jpeg_bytes(img)))
+    feats = extract_thumbnail_features(URL)
+    assert feats["thumb_face_count"] == 0.0
+
+
+@respx.mock
+def test_imagem_com_rosto_detecta_pelo_menos_um():
+    respx.get(URL).mock(return_value=httpx.Response(200, content=ROSTO_EXEMPLO.read_bytes()))
+    feats = extract_thumbnail_features(URL)
+    assert feats["thumb_face_count"] >= 1.0

@@ -1,0 +1,7 @@
+rosto_exemplo.jpg — recorte/redimensionamento de
+example_outputs/largest_selfie.jpg do repositório opencv_zoo
+(https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet),
+licenciado MIT (ver src/breakout/engine_b/models/FACE_DETECTION_YUNET_LICENSE.txt
+pro texto completo da licença). Usado só como fixture de teste — uma imagem
+real com rosto pra validar `thumb_face_count >= 1`, já que não dá pra
+sintetizar um rosto via numpy.
