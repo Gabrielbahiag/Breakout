@@ -363,10 +363,30 @@ else:
         else:
             cutoff = 0.0
             st.caption("Só 1 snapshot coletado até agora — aguardando mais rodadas do cron.")
-        feats = features_mod.extract_features(metadata, snapshots, cutoff_hours=cutoff)
+        with_multimodal = st.checkbox(
+            "Incluir features multimodais (baixa a thumbnail)",
+            help=(
+                "Thumbnail via CV + texto da legenda (Fase 5) — desligado por "
+                "padrão porque baixa uma imagem pela rede a cada execução."
+            ),
+        )
+        feats = features_mod.extract_features(
+            metadata, snapshots, cutoff_hours=cutoff, with_multimodal=with_multimodal
+        )
+
+        if with_multimodal and metadata.thumbnail_url:
+            st.image(metadata.thumbnail_url, caption="Thumbnail", width=320)
+
         with st.container(border=True):
             st.markdown("**Features extraídas (visíveis até o corte)**")
             st.dataframe(pd.Series(feats, name="valor").to_frame(), width="stretch")
+
+        if with_multimodal and metadata.transcript:
+            with st.container(border=True):
+                st.markdown("**Transcrição (legenda)**")
+                trecho = metadata.transcript[:500]
+                st.write(trecho + ("…" if len(metadata.transcript) > 500 else ""))
+
         st.caption(
             "Ainda sem modelo treinado sobre dados reais (falta acumular "
             "outcomes) — só as features, não uma predição."

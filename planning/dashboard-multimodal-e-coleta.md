@@ -1,14 +1,17 @@
 # Planejamento — Dashboard: conectar multimodal + disparar coleta
 
-> Registrado em 2026-08-25. Ainda não implementado. Retomar seguindo
-> test-first (Princípio 4 do CLAUDE.md): escrever os testes da seção
-> "Testes" abaixo ANTES de tocar em código de produção.
+> Registrado em 2026-08-25. **Parte 1 fechada em 2026-08-26** (test-first:
+> `tests/unit/test_dashboard_multimodal.py` escrito antes do código,
+> confirmado falhando, depois implementado até ficar verde). Parte 2 (GitHub
+> API dispatch) ainda não implementada — retomar seguindo test-first
+> (Princípio 4 do CLAUDE.md): escrever os testes da seção "Testes" abaixo
+> ANTES de tocar em código de produção.
 
 Duas partes que ficam juntas por serem ambas mudanças de UI no
 `dashboard.py`, mas são independentes uma da outra — dá pra implementar só
 a Parte 1 sem a Parte 2, ou vice-versa.
 
-## Parte 1 — conectar multimodal ao dashboard
+## Parte 1 — conectar multimodal ao dashboard ✅ FECHADA
 
 ### Contexto
 
@@ -43,6 +46,32 @@ Motor B desde a Fase 5, mas nunca aparecem na tela hoje.
 - `AppTest` com o checkbox ligado, mockando o download da thumbnail via
   `respx` (mesmo padrão de `tests/unit/test_features.py`) — confirma que
   liga sem exceção e que a imagem/features aparecem.
+
+### Implementado (2026-08-26)
+
+Exatamente como planejado: checkbox "Incluir features multimodais (baixa a
+thumbnail)" desligado por padrão na seção do Motor B; quando ligado, mostra
+`st.image(metadata.thumbnail_url)`, a tabela de features (incluindo as
+multimodais) e um trecho da transcrição (até 500 caracteres). Três testes em
+`tests/unit/test_dashboard_multimodal.py` (checkbox desligado sem rede;
+ligado com download mockado via `respx`; ligado com download falho não
+quebra o dashboard).
+
+**Achado não-óbvio que custou uma sessão de debug:** o helper de teste
+`_multimodal_checkbox` procurava `"multimodal" in label.lower()`, mas o
+texto real do checkbox está em português — "multimodai**s**". Como o plural
+troca "modal" por "modais" (o `l` vira `i` antes do `s`), a string
+"multimodal" (singular) NUNCA é substring de "multimodais". O sintoma era
+um `StopIteration` que parecia um bug do `AppTest`/pytest (funcionava em
+scripts manuais de debug, falhava só dentro do teste real) — mas os scripts
+de debug só *imprimiam* a lista de labels pra inspeção visual, nunca
+avaliavam de fato a expressão `"multimodal" in ...`, então pareciam
+confirmar que o checkbox "existia" sem nunca testar o match que realmente
+falhava. Lição: ao depurar um `next(gen)` que estoura `StopIteration`,
+materialize o gerador em lista E imprima o resultado booleano de CADA
+condição do filtro — não só os valores que estão sendo filtrados — antes de
+suspeitar do framework de teste. Corrigido trocando o filtro para
+`"multimoda" in label.lower()` (cobre singular e plural).
 
 ## Parte 2 — disparar coleta pelo dashboard (via GitHub API)
 

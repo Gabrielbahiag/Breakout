@@ -63,6 +63,28 @@ def any_archetype(request) -> Archetype:
 
 
 @pytest.fixture
+def local_sqlite_env(tmp_path, monkeypatch):
+    """Força o composition root a usar SQLite local TEMPORÁRIO — nunca o
+    Turso real, nem o `.env` de dev. Usado pelos testes do dashboard via
+    `streamlit.testing.v1.AppTest` (aplique com
+    `pytestmark = [pytest.mark.usefixtures("local_sqlite_env")]` no arquivo).
+
+    Limpa `st.cache_resource` antes E depois: o dashboard cacheia o
+    `Container` (`_container()`) com `@st.cache_resource`, que o Streamlit
+    compartilha entre TODAS as sessões/instâncias de `AppTest` do mesmo
+    processo — sem isso, um teste de outro arquivo pode herdar a conexão
+    (e o `tmp_path`!) de um teste anterior, apontando pro banco errado."""
+    import streamlit as st
+
+    st.cache_resource.clear()
+    monkeypatch.setenv("TURSO_DATABASE_URL", "")
+    monkeypatch.setenv("TURSO_AUTH_TOKEN", "")
+    monkeypatch.setenv("LOCAL_DB_PATH", str(tmp_path / "dashboard_test.db"))
+    yield
+    st.cache_resource.clear()
+
+
+@pytest.fixture
 def planted_signal_dataset():
     """Dataset sintético do Motor B com um sinal PLANTADO conhecido: título
     com número triplica a chance de viralizar, por construção. Mesmo truque

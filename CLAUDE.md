@@ -30,7 +30,7 @@ teto honesto do problema.
 
 ## 2. Estado atual (o que já existe)
 
-O esqueleto **já está construído e roda verde**: `pytest` → 152 testes passando,
+O esqueleto **já está construído e roda verde**: `pytest` → 155 testes passando,
 **zero `xfail`**. **Fase 0 fechada de verdade**: repo público
 (`Gabrielbahiag/Breakout`), Turso em produção, YouTube API key configurada,
 coletor rodando no cron do GitHub Actions e já validado com dados reais
@@ -477,14 +477,19 @@ por nada) · `matplotlib`/`plotly`.
     diário) além do `workflow_dispatch` — manual com `query` = termo avulso;
     manual sem `query` ou cron = `discover-all` (todos os nichos ativos).
     Lista começa VAZIA — usuário adiciona nichos pelo dashboard quando quiser.
-  - ⬜ **Dashboard: multimodal + disparo de coleta** —
-    `planning/dashboard-multimodal-e-coleta.md`. Parte 1: mostrar
-    thumbnail/transcrição no dashboard (`with_multimodal=True` opcional,
-    igual ao `features.py`). Parte 2 (confirmada pelo usuário): botão no
-    dashboard dispara `collect`/`discover` via API do GitHub
-    (`workflow_dispatch` remoto) — preserva "dashboard read-only" (nunca
-    escreve no Turso direto), mas introduz o PRIMEIRO secret do projeto com
-    poder de escrita de verdade (GitHub PAT fine-grained, escopo Actions).
+  - **Dashboard: multimodal + disparo de coleta** —
+    `planning/dashboard-multimodal-e-coleta.md`.
+    - ✅ **Parte 1 fechada (2026-08-26):** checkbox "Incluir features
+      multimodais" (desligado por padrão) na seção do Motor B do modo
+      "Dados reais" — quando ligado, mostra a thumbnail de verdade
+      (`st.image`), a tabela de features (incluindo as de CV/transcrição) e
+      um trecho da transcrição. Testado com `AppTest` +
+      `respx` (`tests/unit/test_dashboard_multimodal.py`).
+    - ⬜ **Parte 2 pendente:** botão no dashboard dispara `collect`/
+      `discover` via API do GitHub (`workflow_dispatch` remoto) — preserva
+      "dashboard read-only" (nunca escreve no Turso direto), mas introduz o
+      PRIMEIRO secret do projeto com poder de escrita de verdade (GitHub PAT
+      fine-grained, escopo Actions).
 
 ---
 

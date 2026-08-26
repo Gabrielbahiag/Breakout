@@ -13,16 +13,9 @@ from pathlib import Path
 import pytest
 from streamlit.testing.v1 import AppTest
 
-pytestmark = pytest.mark.unit
+pytestmark = [pytest.mark.unit, pytest.mark.usefixtures("local_sqlite_env")]
 
 DASHBOARD_PATH = str(Path(__file__).resolve().parents[2] / "src" / "breakout" / "dashboard.py")
-
-
-@pytest.fixture(autouse=True)
-def _local_sqlite_env(tmp_path, monkeypatch):
-    monkeypatch.setenv("TURSO_DATABASE_URL", "")
-    monkeypatch.setenv("TURSO_AUTH_TOKEN", "")
-    monkeypatch.setenv("LOCAL_DB_PATH", str(tmp_path / "dashboard_test.db"))
 
 
 def test_dashboard_sobe_sem_excecao_com_banco_vazio():
