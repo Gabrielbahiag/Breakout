@@ -11,7 +11,11 @@ dependencies = [
     "ruptures>=1.1",
     "scikit-learn>=1.4",
     "shap>=0.45",
-    "opencv-python>=4.9",
+    # headless, não "opencv-python": o Streamlit Cloud (e o GitHub Actions)
+    # não tem libGL/libglib do sistema — só usamos processamento de imagem
+    # puro (imdecode/cvtColor/Canny/split), nada de GUI (highgui), então o
+    # build headless evita depender dessas libs de sistema inexistentes.
+    "opencv-python-headless>=4.9",
     "httpx>=0.27",
 ]
 

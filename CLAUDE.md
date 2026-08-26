@@ -384,7 +384,10 @@ o dashboard puxa UMA trajetória por vez, nunca o banco inteiro na memória.
 
 **Núcleo:** `python` · `numpy` · `pandas` · `typer` · `pydantic-settings` ·
 `ruptures` (PELT, Motor A) · `scikit-learn` (`model.py`) · `shap` (`explain.py`) ·
-`opencv-python` (`thumbnail.py`, Fase 5) · `httpx` (download da thumbnail).
+`opencv-python-headless` (`thumbnail.py`, Fase 5 — **headless, não
+`opencv-python`**: Streamlit Cloud/GitHub Actions não têm `libGL`/`libglib`
+do sistema, e não usamos nenhuma função de GUI do OpenCV) · `httpx` (download
+da thumbnail).
 `scipy` é dependência direta (Student-t/logsumexp do BOCPD), embora só apareça
 explícita transitivamente via `ruptures`.
 **Testes (`[dev]`):** `pytest` · `pytest-cov` · `hypothesis` · `time-machine` ·
